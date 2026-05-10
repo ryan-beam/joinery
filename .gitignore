@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+.tox/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Workshop runtime artifacts (per-project, not framework)
+.workshop/usage.jsonl
+
+# Secrets (never commit)
+*.key
+*.pem
+.env.local

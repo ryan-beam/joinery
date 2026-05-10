@@ -1,0 +1,25 @@
+# Normalize line endings to LF in the repository.
+# Windows working trees can keep CRLF; the repo stores LF.
+# Prevents phantom CRLF/LF diffs when collaborating across platforms.
+* text=auto eol=lf
+
+# Markdown is text
+*.md text eol=lf
+
+# Python source
+*.py text eol=lf
+
+# Bash scripts must be LF (some shells reject CRLF)
+*.sh text eol=lf
+
+# Config files
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+
+# Binary files (declare explicitly to prevent accidental text handling)
+*.png binary
+*.jpg binary
+*.gif binary
+*.pdf binary
