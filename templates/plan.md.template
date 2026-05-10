@@ -1,0 +1,94 @@
+# Plan: {{project_name}}
+
+**Status:** drafting
+**Tier:** {{tier}}
+**Last updated:** {{date}}
+**Related:** [docs/architecture.md](docs/architecture.md), [docs/decisions/](docs/decisions/)
+
+---
+
+## 0. Context (OPTIONAL — paste prior planning, research, transcripts)
+
+<Whatever forms the foundation of this plan. Research notes, transcripts of stakeholder conversations, prior planning docs, links to related work. Raw and unpolished is fine — this is the workshop floor before the project starts. Skip entirely if not applicable.
+
+Length: as much as needed. Some plans have no context section; some have 200 lines of prior thinking dumped here. Both fine.>
+
+## 1. Problem
+
+<What needs solving, why, who it's for, when it matters. Capture enough that a stranger could understand the problem cold.
+
+Length: as much as needed. One sentence for trivial work. Multiple paragraphs covering history, constraints, prior failed approaches, and current state for complex work. The right length is "enough that the problem is genuinely clear," not "one paragraph">
+
+## 2. Approach
+
+<The strawman. How we plan to solve it. Include Mermaid architecture diagram for non-trivial systems. Include a "what could go wrong" paragraph that flags risks inline.
+
+Length: as much as needed. Trivial fixes might be a sentence. Complex systems might have multiple sub-sections.>
+
+```mermaid
+graph TD
+  A[Component A] --> B[Component B]
+  B --> C[Component C]
+```
+
+**Files in scope:** <list paths the agent is allowed to touch during cutting>
+
+## 3. Success criteria
+
+<Testable assertions. Each one becomes a failing test in Phase 3 (Marking). Be specific.
+
+Bad: "performance is fast." Good: "P50 latency under 200ms with 100 concurrent requests."
+Bad: "handles edge cases." Good: "rejects empty input with HTTP 400 plus 'name required' message."
+
+Length: as many as the problem has. 3 criteria for a small fix; 30 for a complex feature. Don't artificially compress.>
+
+- [ ] When X happens, Y produces Z
+- [ ] Edge case A is handled by B
+- [ ] Performance: P50 latency under N ms
+
+## 4. Forbidden actions
+
+<What the agent must never do during cutting. The rails.
+
+Length: 3-5 bullets typical, more for sensitive systems. Concision matters here — vague rails don't enforce.>
+
+- Do not modify files outside the listed scope
+- Do not add new dependencies without surfacing first
+- Do not skip the failing test handoff
+- Do not delete or disable existing tests
+
+## 5. Side quests
+
+<Concepts, libraries, or patterns that appeared in this plan and you don't fully grok yet. Each gets logged to `learning/side-quests.md` automatically.>
+
+- [ ] [concept]: <one-line "what I don't get yet">
+
+## 6. Data model (CONDITIONAL — include if persistent state)
+
+<Mermaid ER diagram + brief notes on entity decisions. Skip if no persistent state.>
+
+```mermaid
+erDiagram
+  USER ||--o{ ACCOUNT : has
+  ACCOUNT ||--o{ PROFILE : has
+```
+
+## 7. Critical flows (CONDITIONAL — include if non-trivial interactions)
+
+<Mermaid sequence diagrams for the 2-3 most important user/system journeys. Skip if the system has only one obvious flow.>
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant S as System
+  U->>S: action
+  S-->>U: response
+```
+
+---
+
+## Decisions log (appended during work)
+
+<Each non-trivial decision links to its ADR. Filled in during cutting, not pre-written.>
+
+- [ADR-0001](docs/decisions/0001-tier-selection.md) — Selected tier: {{tier}}

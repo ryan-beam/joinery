@@ -1,0 +1,28 @@
+# Side quests for {{project_name}}
+
+Concepts you don't fully grok yet. Captured at three moments:
+
+- **Automatic during cutting** — agent flags when it uses a concept you didn't engage with in the plan
+- **Automatic during planning** — `/plan-side-quests` scans the finished plan for unfamiliar concepts
+- **Manual** — `/sq <concept>` command, ~5 seconds
+
+Closures via `/sq close SQ-NNN` after a learning session. Entries stay in this file forever — track learning over time.
+
+## Format per entry
+
+```
+## SQ-NNN: <concept>
+- **Captured:** <YYYY-MM-DD HH:MM>
+- **Where:** <plan section, file, conversation context>
+- **What I don't get:** <one-line>
+- **Status:** open | done
+- **Resources collected:**
+  - [ ] <link or note>
+- **What I now understand:** <filled at closure>
+```
+
+---
+
+## Entries
+
+<!-- New entries are appended below by /sq, /plan-side-quests, or auto-capture during cutting. -->

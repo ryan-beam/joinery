@@ -1,0 +1,34 @@
+# ADR-0001: Tier selection — {{tier}}
+
+**Status:** Accepted
+**Date:** {{date}}
+**Decider:** <author name>
+
+## Context
+
+This project was initialized with `workshop init {{project_name}} --tier {{tier}}`. The framework's tier system (production / standard / sketch) configures defaults based on **risk profile**, not project size or category.
+
+## Decision
+
+The project starts on **{{tier}} tier**. This sets the framework defaults documented in `framework.config.toml`. Tier promotion (`workshop promote --to <tier>`) is supported when the project's risk profile increases. Demotion is intentionally not supported.
+
+## Why this tier
+
+<Replace this paragraph with the actual rationale for the tier choice. Examples:
+
+- **Production:** "Real users, real money, real consequences. The system handles payment data and is publicly deployed."
+- **Standard:** "Personal serious project. I'll keep using it but it's not shipping publicly. Discipline is advisory."
+- **Sketch:** "Throwaway experiment. Iterating fast on an idea; will likely delete in a week.">
+
+## Consequences
+
+- Framework defaults set per the tier — see `framework.config.toml` for the actual values
+- Tier-specific gates apply (see workshop-level CLAUDE.md and project CLAUDE.md)
+- Promotion is additive and supported (`workshop promote --to <tier>`); demotion is not
+- The plan template, hook behavior, learning module, and review trigger all read this tier setting
+
+## References
+
+- See `docs/spec.md` §4 (Three Tiers) for the design rationale
+- See `framework.config.toml` for the actual defaults applied
+- See [docs/architecture.md](../architecture.md) for the system overview

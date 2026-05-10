@@ -1,0 +1,25 @@
+# HANDOVER
+
+State of work for the next session. **Overwritten at every `workshop session end`** — read at the start of every `workshop session start`.
+
+**Last session ended:** {{init_at}}
+**Active branch:** {{branch}}
+**Current plan status:** drafting
+
+---
+
+## What got done last session
+
+<Filled by `/handover` at session end. Empty at init.>
+
+## What's next
+
+<Filled by `/handover` at session end. Suggestions for next session — what to pick up first, what context to load.>
+
+## Open side quests
+
+<Auto-pulled from `learning/side-quests.md`. Empty at init.>
+
+## Notes for next-self
+
+<Anything to remember, context to load, follow-ups to chase. Filled by `/handover` based on session conversation.>

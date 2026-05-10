@@ -1,0 +1,35 @@
+# {{project_name}}
+
+<One-paragraph description of what this project does and who it's for. Replace this paragraph at first edit.>
+
+## Status
+
+<Current status — alpha, in development, stable, etc. Replace at first edit.>
+
+## Install
+
+<How to install or run the project locally. Replace with real instructions when ready.>
+
+## Usage
+
+<Basic usage example.>
+
+## Development
+
+This project is built with [Joinery](https://github.com/ryan-beam/joinery) — a personal coding framework for the AI-agent era.
+
+- **Tier:** {{tier}}
+- **Primary language:** {{language}}
+- **Initialized:** {{init_at}}
+
+Key files:
+- `CLAUDE.md` — project rules (5 starters; grows from real failures via `/rule`)
+- `plan.md` — current plan
+- `docs/architecture.md` — system design
+- `docs/decisions/` — Architecture Decision Records
+
+Run `workshop session start` to begin a working session, `workshop session end` to wrap it up.
+
+## License
+
+<License here. MIT is a common default; pick what fits.>
