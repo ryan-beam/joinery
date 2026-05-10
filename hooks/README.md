@@ -1,30 +1,35 @@
 # hooks/
 
-The 4 git hook bash scripts that `workshop init` installs into `.git/hooks/` of scaffolded projects. Filled in **Phase 3** of the build.
+Git hook bash scripts that `workshop init` installs into `.git/hooks/` of scaffolded projects. Joinery owns 4 hooks; the 5th (post-commit, for adversarial review) is managed by [roborev](https://github.com/roborev-dev/roborev) when installed.
 
-Note: Joinery owns 4 hooks. The 5th (post-commit, for adversarial review) is managed by [roborev](https://github.com/roborev-dev/roborev), which Joinery adopts as its review engine.
-
-## What lives here (after Phase 3)
+## Hooks
 
 ```
 hooks/
-├── pre-commit          # lint + type-check + test + AGENTS.md mirror
-├── pre-push            # last-line-of-defense; refuses direct main pushes on production
+├── pre-commit          # lint + type-check on staged files + AGENTS.md mirror
+├── pre-push            # refuses direct main pushes on production; reads reviews/ for critical findings
 ├── commit-msg          # Lore Protocol structure check; bot/daemon authors bypass
 └── post-merge          # preflight refresh after pulling/merging
 ```
 
 ## Implementation principles
 
-- **< 50 lines per hook.** Transparent on read. If you can't see what it does in 30 seconds, refactor.
-- **`set -euo pipefail`** at the top of every script. No silent error swallowing.
-- **Specific error messages.** Name the rule violated and where it lives.
-- **Deterministic where possible.** Shell out to `ruff` / `biome` / `pytest` / etc. Only invoke Claude Code subprocess when AI is genuinely needed.
-- **Cross-platform.** Tested on Windows Git Bash AND Linux.
-- **Tier-aware.** Read `.workshop/config.toml` and adjust behavior accordingly.
+- **`set -euo pipefail`** at top of every script
+- **Specific error messages** naming the rule violated and pointing to docs
+- **Tier-aware** via `.workshop/config.toml` (read via Python tomllib in one call per hook)
+- **Per-hook toggles** respected — each hook checks its `[hooks].<name>` flag
+- **Cross-platform** — `python3` with `python` fallback for Windows Git Bash compatibility
+- **Executable bit tracked** via git (chmod +x set; preserved across clones)
 
-## Phase 3 quality bar
+Each hook is under 50 lines of code (excluding comments). If you can't understand what a hook does in 30 seconds, refactor.
 
-Failures must be loud and specific (not "commit failed" black boxes). Each hook fires only when its preconditions are met. Per-hook toggles (in `[hooks]` config) work correctly.
+## What lives where
 
-See [`../docs/spec.md`](../docs/spec.md) §8 (Hook Catalog) for full hook specifications. See [`../plan.md`](../plan.md) §3 for Phase 3 success criteria.
+| Hook | Fires | Behavior |
+|---|---|---|
+| pre-commit | Before commit lands | Lint + type-check on staged files; mirrors CLAUDE.md to AGENTS.md |
+| pre-push | Before push leaves machine | Refuses direct main on production; reads `reviews/` for critical findings |
+| commit-msg | After commit message composed | Enforces Lore Protocol over threshold; bypasses bot authors |
+| post-merge | After pull/merge | Quick lint check; surfaces dep changes |
+
+See `docs/spec.md` §8 (Hook Catalog) for full specifications.

@@ -1,37 +1,56 @@
 # skills/
 
-The 23 markdown skill files that ship with Joinery. Filled in **Phase 2** of the build.
+Markdown skill files that shape agent behavior in scaffolded projects. Each is a small, focused file Claude Code (or other compatible agents) reads at invocation.
 
-## What lives here (after Phase 2)
+## Catalog (23 skills)
 
-**Planning skills (6):**
-- `plan.md` (orchestrator)
-- `plan-system.md`, `plan-data.md`, `plan-flows.md`
-- `plan-decisions.md`, `plan-side-quests.md`
+**Planning (6):**
+- `plan` — orchestrator; drives unbounded planning conversation, leverages Claude Code plan mode
+- `plan-system` — architecture sketch with Mermaid
+- `plan-data` — ER diagram (conditional)
+- `plan-flows` — sequence diagrams (conditional)
+- `plan-decisions` — surfaces decisions, drafts ADRs
+- `plan-side-quests` — extracts learning gaps to `learning/side-quests.md`
 
-**Workflow skills (7):**
-- `mark.md`, `explain-back.md`, `handover.md`
-- `review.md`, `security-review.md` (thin wrappers around roborev)
-- `adr.md`, `pr.md`
+**Workflow (7):**
+- `mark` — failing tests from plan success criteria
+- `explain-back` — comprehension-gate transcript
+- `handover` — session-end state for next session
+- `review` — adversarial review (roborev > Claude Code built-in > Claude subprocess fallback)
+- `security-review` — security-focused review (manual only)
+- `adr` — Architecture Decision Record
+- `pr` — Lore Protocol-flavored PR description
 
-**Discipline skills (4):**
-- `rule.md`, `sq.md`, `audit.md`, `digest.md`
+**Discipline (4):**
+- `rule` — capture a real failure as a CLAUDE.md rule (manual only)
+- `sq` — side quest capture
+- `audit` — comprehension audit scaffold (manual or cadence-prompted)
+- `digest` — weekly digest aggregating SQs, skills logged, ratio, token usage
 
-**Documentation skills (4):**
-- `docs.md` (orchestrator)
-- `docs-changelog.md`, `docs-getting-started.md`, `docs-architecture.md`
+**Documentation (4):**
+- `docs` — orchestrator; surveys staleness, composes sub-skills
+- `docs-changelog` — update CHANGELOG from git
+- `docs-getting-started` — refresh onboarding doc from current project state
+- `docs-architecture` — refresh architecture doc from code + ADRs
 
-**Session skills (2):**
-- `workshop-session-start.md`, `workshop-session-end.md`
+**Session (2):**
+- `workshop-session-start` — read HANDOVER, run preflight
+- `workshop-session-end` — explain-back + handover + SQ reconcile + token report
+
+## Invocation modes
+
+- **Auto-invoke** (most skills) — Claude reads the frontmatter `description` and triggers from natural language
+- **Manual only** — `rule`, `audit`, `security-review` (intentionality matters)
+- **Hook-fired** — `review`, `explain-back`, `handover`, `mark`, `plan-decisions`, `plan-side-quests` (triggered by hooks or composed by other skills)
+
+See `docs/spec.md` §7 (Skill Catalog) for full per-skill design.
 
 ## Skill file format
-
-Each skill is a markdown file Claude Code reads at invocation. Frontmatter declares name + description (used for auto-invocation matching). Body declares procedure, output format, examples.
 
 ```yaml
 ---
 name: <skill-name>
-description: <when to invoke; explicit trigger phrases>
+description: <one paragraph including explicit trigger phrases>
 ---
 
 # <Skill Name>
@@ -49,13 +68,4 @@ description: <when to invoke; explicit trigger phrases>
 <1-2 worked examples>
 ```
 
-## Phase 2 audit-first discipline
-
-Before writing any skill from scratch, check existing options:
-1. Claude Code built-in skills
-2. `obra/superpowers` skill pack
-3. Other community skills
-
-Only write from scratch what has no existing fit. Final skill count may be lower than 23 if audits succeed.
-
-See [`../docs/spec.md`](../docs/spec.md) §7 (Skill Catalog) for the full skill list with triggers and costs. See [`../plan.md`](../plan.md) §3 for Phase 2 success criteria.
+The frontmatter `description` field is load-bearing — Claude matches natural language against it to decide when to auto-fire the skill.

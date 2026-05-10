@@ -1,17 +1,17 @@
 # templates/
 
-Static markdown templates that `workshop init` copies into new projects. Filled in **Phase 1** of the build.
+Static markdown and TOML files that `workshop init` copies into new projects, with Jinja2 `{{var}}` placeholders rendered against project-specific values.
 
-## What lives here (after Phase 1)
+## What lives here
 
 ```
 templates/
-├── CLAUDE.md.starter           # the 5-rule starter (project-level)
-├── CLAUDE.md.global            # workshop-level defaults (~/.config/joinery/)
-├── plan.md.template            # the structured plan template
+├── CLAUDE.md.starter           # 5-rule project starter (becomes CLAUDE.md)
+├── CLAUDE.md.global            # workshop-level defaults (~/.config/joinery/CLAUDE.md)
+├── plan.md.template            # plan.md template per spec §6
 ├── HANDOVER.md.template        # session handoff format
 ├── README.md.template          # project README skeleton
-├── AGENTS.md.template          # mirror of CLAUDE.md
+├── AGENTS.md.template          # mirror of CLAUDE.md for Cursor/Codex
 ├── learning/
 │   ├── side-quests.md.template
 │   ├── skills-log.md.template
@@ -22,23 +22,29 @@ templates/
 │   └── decisions/
 │       └── 0001-tier-selection.md.template
 └── config/
-    ├── framework.config.toml.production
+    ├── framework.config.toml.production    # tier defaults per spec §14
     ├── framework.config.toml.standard
     └── framework.config.toml.sketch
 ```
 
-## Templating syntax
+## Placeholder variables
 
-Placeholders use Jinja2-style `{{var}}` syntax. Common variables:
+Templates use Jinja2 `{{var}}` syntax. The `workshop init` command renders them against this context:
 
-- `{{project_name}}` — the project name from `workshop init <name>`
-- `{{tier}}` — production / standard / sketch
-- `{{language}}` — python / typescript / polyglot
-- `{{date}}` — ISO 8601 date at init time
-- `{{init_at}}` — full ISO 8601 timestamp at init time
+| Variable | Value |
+|---|---|
+| `{{project_name}}` | Project name from `workshop init <name>` |
+| `{{tier}}` | `production` / `standard` / `sketch` |
+| `{{language}}` | `python` / `typescript` / `polyglot` |
+| `{{date}}` | ISO 8601 date at init time |
+| `{{init_at}}` | Full ISO 8601 timestamp |
+| `{{joinery_version}}` | Framework version |
 
-## Phase 1 quality bar
+## Adding a new template
 
-Each template ships ready-to-use. No "polish later" sections. Placeholders consistent across templates. The 5-rule starter feels right (you'd actually keep it on a real project).
+1. Add the file here with appropriate placeholders
+2. Update `src/joinery/init.py` to copy it
+3. Add the variable to `render_context()` in `src/joinery/templates.py` if new placeholders are needed
+4. Add a test in `tests/test_init.py` asserting the file is present after `scaffold()`
 
-See [`../docs/spec.md`](../docs/spec.md) §5 (Project Layout) and §6 (plan.md Template) for the full content specifications. See [`../plan.md`](../plan.md) §3 for Phase 1 success criteria.
+See [`../docs/spec.md`](../docs/spec.md) §5 (Project Layout) and §6 (plan.md Template) for the content specifications.
