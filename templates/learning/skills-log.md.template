@@ -1,0 +1,20 @@
+# Skills log for {{project_name}}
+
+The durable record of concepts you now actually understand. Each entry is appended at the moment a side quest closes.
+
+This is your concrete answer to "what have I learned this semester / quarter / project?" — without guessing.
+
+## Format per entry
+
+```
+## YYYY-MM-DD — <concept>
+- **Source:** SQ-NNN, <docs / blog post / conversation that closed it>
+- **What I now understand:** <one paragraph in plain language>
+- **Used since:** <commit reference, feature, or "not yet">
+```
+
+---
+
+## Entries
+
+<!-- Append-only. New entries written by /sq close. -->

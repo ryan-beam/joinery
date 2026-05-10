@@ -1,0 +1,37 @@
+# Comprehension audits for {{project_name}}
+
+The cold-explanation ritual. Pick a recent commit, explain the flow without looking at the code, score honestly, file gaps as new side quests.
+
+**Cadence:** trigger-based. Default trigger is `"20 commits OR 14 days, whichever comes first"` (configurable via `[learning] audit_trigger` in `framework.config.toml`). The `/digest` flags overdue audits with a banner; 2x overdue triggers a hard banner.
+
+**The audit is human-written.** The framework can't write it for you, but it makes the absence loud.
+
+## Format per audit
+
+```
+## Week W## — YYYY-MM-DD
+
+**Audited:** <description of code / commit / feature>, commit <hash>
+
+**Cold explanation:**
+> <write the explanation without looking at the code>
+
+**Gaps found:**
+- <thing you waved hands at> → SQ-NNN
+- <thing you couldn't explain cleanly> → SQ-NNN
+
+**Score:** N/5
+- 5 = solid understanding everywhere
+- 4 = solid on the flow, hand-wavy on one piece
+- 3 = solid on the goal, fuzzy on the mechanics
+- 2 = could describe what but not why
+- 1 = couldn't explain at all
+```
+
+**Discipline:** Score under 3 = comprehension debt. Pay it before the next big build.
+
+---
+
+## Audits
+
+<!-- New audits prepended (newest at top) by /audit. -->

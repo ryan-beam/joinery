@@ -1,0 +1,35 @@
+# Workshop-level defaults
+
+These rules apply to every Joinery project unless explicitly overridden in the project's own `CLAUDE.md`. This file is installed at `~/.config/joinery/CLAUDE.md` by `workshop setup` and read on every session start.
+
+## Code style
+
+1. **No emojis in code or code files.** Source files, comments, commit messages, and configuration files are emoji-free. Documentation files (README, docs/) may use them sparingly when they aid scanning. Never in the code itself.
+
+2. **Comments earn their place.** Default to no comments. Only write a comment when the WHY is non-obvious: a hidden constraint, a workaround for a specific bug, behavior that would surprise a future reader. If removing the comment wouldn't confuse anyone, don't write it.
+
+3. **Don't explain WHAT.** Well-named identifiers explain what. Don't add comments that restate the code. Don't reference current task context ("for the X flow", "added for issue #123") — that belongs in commit messages and rots in code.
+
+4. **Descriptive names over abbreviated ones.** `user_account_id` over `uid`. The keystroke savings aren't worth the cognitive load on every read.
+
+5. **Surface, don't swallow.** Errors propagate or get logged with context. Bare `except:` clauses, swallowed promise rejections, and silent fallbacks hide bugs. If you handle an error, say what you did and why.
+
+## Process
+
+6. **Commit small.** One logical change per commit. If a commit message needs "and" to describe what it did, it should have been two commits.
+
+7. **Plans before changes on production tier.** Already enforced by the framework, restated here for new contributors.
+
+## Conventions
+
+8. **Dates are ISO 8601 (`YYYY-MM-DD`) in writing.** No `5/9/26` ambiguity.
+
+9. **Times in code default to UTC.** Display in local time at the edge.
+
+10. **Paths use forward slashes in docs and configs even on Windows.** The workshop is cross-platform.
+
+---
+
+These are starter defaults — editable, not scripture. New ones get added when a preference proves sticky across multiple projects. Old ones get removed when they stop pulling weight.
+
+Unlike project-level `CLAUDE.md` (which grows from `/rule` scars), this file is editable directly because its content is *standards*, not *failure remediation*.
