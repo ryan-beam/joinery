@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Joinery post-merge hook.
+# Surfaces post-merge actions; quick lint check.
+# See docs/spec.md section 8.
+
+set -euo pipefail
+
+CONFIG=".workshop/config.toml"
+[ ! -f "$CONFIG" ] && exit 0
+
+PYTHON=$(command -v python3 || command -v python || echo "")
+[ -z "$PYTHON" ] && exit 0
+
+eval "$($PYTHON -c "
+import tomllib
+c = tomllib.load(open('$CONFIG', 'rb'))
+print(f'ENABLED={str(c[\"hooks\"][\"post_merge\"]).lower()}')
+" 2>/dev/null)"
+
+[ "${ENABLED:-true}" != "true" ] && exit 0
+
+echo "post-merge: pulled or merged. Suggested next steps:"
+echo "  - Run 'workshop session start' to refresh state"
+echo "  - Check dep changes: git diff HEAD@{1} pyproject.toml package.json (if applicable)"
+
+# Surface immediate lint issues without auto-fixing
+if command -v ruff >/dev/null 2>&1 && find . -name "*.py" -not -path "./.git/*" -not -path "./.venv/*" 2>/dev/null | head -1 | grep -q .; then
+    ISSUES=$(ruff check . 2>/dev/null | head -5 || true)
+    if [ -n "$ISSUES" ]; then
+        echo ""
+        echo "post-merge: ruff sees issues (top 5):"
+        echo "$ISSUES" | sed 's/^/  /'
+    fi
+fi
+
+exit 0

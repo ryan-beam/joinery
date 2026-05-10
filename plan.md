@@ -73,35 +73,41 @@ graph LR
 
 ## 3. Success criteria
 
-Phase 0 (currently active):
-- [ ] Repo exists locally with full directory tree per `docs/spec.md` §5
-- [ ] `README.md` reads cleanly to a stranger; `what / why / status` are clear
-- [ ] `CLAUDE.md` contains the 5-rule starter from spec §11
-- [ ] `AGENTS.md` mirrors `CLAUDE.md`
-- [ ] `plan.md` (this file) is genuinely useful, not ceremony
-- [ ] First ADR records the foundational tier-as-risk-profile decision
-- [ ] `docs/spec.md` is the canonical copy of the design specification
-- [ ] All placeholder directories have a README explaining their role
-- [ ] `pyproject.toml` skeleton has metadata, ruff/mypy/pytest tool configs
-- [ ] First commit lands locally
-- [ ] GitHub repo created at `ryan-beam/joinery` (private initially)
-- [ ] First push lands on GitHub
+Phase 0 — Foundation (complete 2026-05-10):
+- [x] Repo exists locally with full directory tree per `docs/spec.md` §5
+- [x] `README.md` reads cleanly to a stranger; `what / why / status` are clear
+- [x] `CLAUDE.md` contains the 5-rule starter from spec §11
+- [x] `AGENTS.md` mirrors `CLAUDE.md`
+- [x] `plan.md` (this file) is genuinely useful, not ceremony
+- [x] First ADR records the foundational tier-as-risk-profile decision
+- [x] `docs/spec.md` is the canonical copy of the design specification
+- [x] All placeholder directories have a README explaining their role
+- [x] `pyproject.toml` skeleton has metadata, ruff/mypy/pytest tool configs
+- [x] First commit lands locally
+- [x] GitHub repo created at `ryan-beam/joinery` (private initially)
+- [x] First push lands on GitHub
 
-Phase 1 success criteria (later):
-- [ ] All static markdown templates written and reviewed
-- [ ] Three `framework.config.toml` tier variants reflect spec §14 defaults
-- [ ] Plan template flexibility honored (lengths flexible per section, Section 0 for context dumps)
+Phase 1 — Project Templates (complete 2026-05-10, on feature branch):
+- [x] All static markdown templates written
+- [x] Three `framework.config.toml` tier variants reflect spec §14 defaults
+- [x] Plan template flexibility honored (lengths flexible per section, Section 0 for context dumps)
+- [ ] Phase 1 PR opened, reviewed, and squash-merged to main
 
-Phase 2 success criteria (later):
-- [ ] All 23 skill files written with real content
-- [ ] Auto-invocation triggers explicit in each skill's frontmatter
-- [ ] Audit-first applied: existing skills (Claude Code built-ins, superpowers pack) checked before writing custom
+Phase 2 — Skills (complete 2026-05-10, on feature branch):
+- [x] All 23 skill files written with real content (post-audit cuts: was 25, dropped /plan-contracts and /plan-risks)
+- [x] Auto-invocation triggers explicit in each skill's frontmatter
+- [x] Audit-first applied: Claude Code built-ins identified for /review and /security-review (skills become thin wrappers); deeper /superpowers audit deferred to Phase 5 dogfooding
+- [ ] Phase 2 PR opened, reviewed, and squash-merged to main
 
-Phase 3 success criteria (later):
-- [ ] All 4 hook scripts under 50 lines, fail loud and specific
-- [ ] Cross-platform tested (Windows Git Bash + Linux)
-- [ ] pre-push refuses direct main pushes on production tier
-- [ ] pre-push reads `reviews/` and refuses on critical findings
+Phase 3 — Hooks (currently active, on feature branch):
+- [x] All 4 hook scripts under 50 lines (code-only count), fail loud and specific
+- [x] pre-push refuses direct main pushes on production tier
+- [x] pre-push reads `reviews/` and refuses on critical findings
+- [x] commit-msg enforces Lore Protocol structure on commits over threshold; bypasses trusted bot authors
+- [x] All hooks tier-aware (read .workshop/config.toml)
+- [x] Hooks are executable (chmod +x set)
+- [ ] Cross-platform tested (Windows Git Bash + Linux) — deferred to Phase 4 when CLI installs them into a real test project
+- [ ] Phase 3 PR opened, reviewed, and squash-merged to main
 
 Phase 4 success criteria (later):
 - [ ] `workshop init` produces fully scaffolded directory in <2s for all 9 tier × lang permutations
