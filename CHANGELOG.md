@@ -6,91 +6,73 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
-### Phase 4 — Workshop CLI (2026-05-10)
+Nothing yet.
 
-The Python click-based workshop CLI. First executable code in the repo. Installs via `pip install -e .` (or `pipx install joinery-cli` once published).
+## [0.1.0] — 2026-05-10
 
-- **`workshop init <name>`** — scaffold a new Joinery project. Interactive when flags omitted; flag-driven for power users. Reads tier-variant templates, renders Jinja2 `{{var}}` placeholders, installs hooks into `.git/hooks/`, copies skills into `.claude/skills/`, initializes git, makes an initial commit.
-- **`workshop session start`** — reads HANDOVER.md, runs preflight checks (git status, plan freshness on production tier), prints session-start summary.
-- **`workshop session end`** — frames the session-end ritual; the actual explain-back/handover/sq-reconcile happens in the agent via the `workshop-session-end` skill.
-- **`workshop promote <project> --to <tier>`** — additive scaffold upgrade (sketch → standard → production). Refuses demotion. Updates `framework.config.toml`, adds missing directories/hooks, commits.
-- **`workshop doctor [--project P]`** — verifies workshop + project health (workshop config, ccstatusline, roborev, .workshop/config.toml validity, hooks installed, CLAUDE.md ↔ AGENTS.md sync, plan.md freshness on production).
-- **`workshop --version` / `workshop --help`** — standard click help; clear command tree.
+First pre-alpha release. The complete v1 framework: templates, skills, hooks, and the workshop CLI. Built from a 2000-line design specification and dogfooded on itself (production-tier discipline applied from the first commit).
 
-Modules:
-- `joinery.cli` — click entry point with subcommand tree
-- `joinery.init` — scaffold logic
-- `joinery.session` — session start/end framing
-- `joinery.promote` — additive tier upgrade
-- `joinery.doctor` — health checks
-- `joinery.lang` — language detection (`python` / `typescript` / `polyglot`)
-- `joinery.config` — `.workshop/config.toml` read helpers (uses stdlib `tomllib`)
-- `joinery.templates` — Jinja2 rendering with `StrictUndefined`
-- `joinery.git` — thin subprocess wrappers (init, add, commit, status)
-- `joinery.paths` — locate `templates/`, `hooks/`, `skills/` for both editable and wheel installs
+### Added — workshop CLI
 
-Dependencies: `click>=8.1`, `jinja2>=3.1`. Python 3.11+ (stdlib `tomllib`).
+Python click-based command-line tool, installable via `pip install -e .` (or `pipx install joinery-cli` once published).
 
-Quality bar applied: mypy --strict clean across 11 source files, ruff check clean (E, W, F, I, B, C4, UP, S, N rule sets), ruff format clean (line-length 100), 42 pytest tests passing covering all 9 init permutations + session/promote/doctor + lang detection + config round-trip + template rendering. Path handling via `pathlib` throughout; no `os.path.join`. Subprocess only where genuinely needed (git operations).
+- `workshop init <name>` — scaffold a new project (interactive or flag-driven). Reads tier-variant templates, renders Jinja2 placeholders, installs hooks, copies skills, initializes git, makes initial commit.
+- `workshop session start` — reads HANDOVER, runs preflight (git status, plan freshness on production), prints session-start summary.
+- `workshop session end` — frames the session-end ritual; agent-driven steps via `workshop-session-end` skill.
+- `workshop promote <project> --to <tier>` — additive scaffold upgrade (sketch → standard → production). Refuses demotion.
+- `workshop doctor` — verifies workshop + project health (config, hooks, sync state, plan freshness).
 
-### Phase 3 — Hooks (2026-05-10)
+Modules in `src/joinery/`: cli, init, session, promote, doctor, lang, config, templates, git, paths. Dependencies: click, jinja2. Python 3.11+.
 
-4 git hook bash scripts that `workshop init` will install into `.git/hooks/` of scaffolded projects. The 5th hook (post-commit, for adversarial review) is managed by roborev, not Joinery.
+42 pytest tests passing. mypy --strict clean. ruff check + format clean.
 
-- `pre-commit` — lint + type-check on staged files; AGENTS.md mirror from CLAUDE.md; tier-aware (type-check only on production)
-- `pre-push` — refuses direct main pushes on production tier; reads `reviews/` for critical findings and refuses if any open
-- `commit-msg` — enforces Lore Protocol structure on production-tier commits over threshold; bypasses trusted bot authors
-- `post-merge` — surfaces post-merge actions; quick lint check without auto-fix
+### Added — 23 skills
 
-Implementation principles applied:
-- `set -euo pipefail` at top of every script
-- Specific error messages naming the rule violated and pointing to docs
-- Tier-aware via `.workshop/config.toml` (read via Python tomllib in one call per hook)
-- Per-hook toggles respected (each hook checks its `[hooks].<name>` flag)
-- Cross-platform: `python3` with `python` fallback for Windows Git Bash compatibility
-- All hooks executable (chmod +x)
+Composable markdown skill files in `skills/`. Auto-invoke from natural language for most; manual-only for `rule`, `audit`, `security-review` where intentionality matters; hook-fired or composed for the rest.
 
-Each hook is under 50 lines of code (excluding comments and blank lines).
+- Planning (6): `plan` (orchestrator, leverages Claude Code plan mode), `plan-system`, `plan-data`, `plan-flows`, `plan-decisions`, `plan-side-quests`
+- Workflow (7): `mark`, `explain-back`, `handover`, `review`, `security-review`, `adr`, `pr`
+- Discipline (4): `rule`, `sq`, `audit`, `digest`
+- Documentation (4): `docs`, `docs-changelog`, `docs-getting-started`, `docs-architecture`
+- Session (2): `workshop-session-start`, `workshop-session-end`
 
-### Phase 2 — Skills (2026-05-10)
+Audit-first applied — `/review` and `/security-review` adopt Claude Code's built-in skills as the priority path (engine order: roborev > Claude Code built-in > Claude subprocess fallback).
 
-23 skill files for the framework's behavioral surface. Auto-invocation triggers explicit in each skill's frontmatter. Most skills auto-invoke from natural language; three are manual-only by design (`/rule`, `/audit`, `/security-review`); several are hook-fired or composed by other skills.
+### Added — 4 git hooks
 
-- **Planning skills (6):** `plan` (orchestrator, leverages Claude Code plan mode), `plan-system`, `plan-data`, `plan-flows`, `plan-decisions`, `plan-side-quests`
-- **Workflow skills (7):** `mark` (failing tests from plan), `explain-back`, `handover`, `review` (adopts Claude Code built-in / roborev / fallback), `security-review` (manual; adopts built-in or deep_reviewer), `adr`, `pr`
-- **Discipline skills (4):** `rule` (Hashimoto pattern, manual only), `sq`, `audit` (manual + cadence-prompted by digest), `digest`
-- **Documentation skills (4):** `docs` (orchestrator), `docs-changelog`, `docs-getting-started`, `docs-architecture`
-- **Session skills (2):** `workshop-session-start`, `workshop-session-end`
+Bash scripts in `hooks/` that `workshop init` installs into `.git/hooks/` of scaffolded projects.
 
-Audit-first applied: Claude Code already ships `/review` and `/security-review` as built-in skills, so Joinery's versions become thin wrappers (engine priority: roborev > Claude Code built-in > Claude subprocess fallback). Deeper audit of `obra/superpowers` deferred to Phase 5 dogfooding when real friction will surface what to fork.
+- `pre-commit` — lint + type-check on staged files + AGENTS.md mirror from CLAUDE.md
+- `pre-push` — refuses direct main pushes on production; reads `reviews/` for critical findings
+- `commit-msg` — Lore Protocol structure on production-tier commits over threshold; bot author bypass
+- `post-merge` — preflight refresh + quick lint surface
 
-Skill count cuts: 25 → 23 by dropping `/plan-contracts` (tests are the contract; `/mark` and `/plan-data` cover) and `/plan-risks` (folded inline into Approach via `/plan-system`).
+Each hook under 50 lines of code. `set -euo pipefail` everywhere. Tier-aware via `.workshop/config.toml`. The 5th hook (post-commit, adversarial review) is managed by [roborev](https://github.com/roborev-dev/roborev) when installed.
 
-### Phase 1 — Project Templates (2026-05-10)
+### Added — 15 project templates
 
-Static markdown and TOML templates that `workshop init` will copy into new projects (Phase 4 wires this up). Phase 1 is content-only; no Python or bash logic.
+Static markdown and TOML templates in `templates/` with Jinja2 `{{var}}` placeholders, rendered by `workshop init` against project-specific values.
 
-- Project-level templates: `CLAUDE.md.starter`, `plan.md.template`, `HANDOVER.md.template`, `README.md.template`, `AGENTS.md.template`
-- Workshop-level template: `CLAUDE.md.global` (10 default rules from spec §11)
-- Tier config variants: `framework.config.toml.production`, `.standard`, `.sketch` (reflecting spec §14 defaults)
-- Learning module templates: `side-quests`, `skills-log`, `comprehension-audits`, `ratio-log.jsonl`, `weekly-digest`
-- Tier-selection ADR template: `docs/decisions/0001-tier-selection.md.template`
-- Templating syntax: Jinja2-style `{{var}}` placeholders (`{{project_name}}`, `{{tier}}`, `{{language}}`, `{{init_at}}`, `{{joinery_version}}`, `{{date}}`)
+- Project-level: `CLAUDE.md.starter` (5-rule starter), `plan.md.template`, `HANDOVER.md.template`, `README.md.template`, `AGENTS.md.template`
+- Workshop-level: `CLAUDE.md.global` (10 default rules)
+- Tier configs: `framework.config.toml.production`, `.standard`, `.sketch` (reflecting spec §14 defaults)
+- Learning module: side-quests, skills-log, comprehension-audits, ratio-log (empty), weekly-digest
+- Tier-selection ADR: `0001-tier-selection.md.template`
 
-### Phase 0 — Foundation (2026-05-10)
+### Added — design + documentation
 
-Initial repository structure. Phase 0 is structure-only; no executable code yet. The framework runs on production tier from day one and eats its own dogfood.
-
-- Repository skeleton per spec §5 (Project Layout)
-- Full design specification at `docs/spec.md`
+- Full design specification at `docs/spec.md` (~2000 lines, 18 sections)
 - 1-page architecture summary at `docs/architecture.md`
 - First ADR: tiers as risk profiles, not project categories
 - 5-rule starter `CLAUDE.md` (production tier)
-- AGENTS.md mirror of CLAUDE.md (manual until pre-commit hook lands in Phase 3)
-- Dogfooded `plan.md` for the v1 build
-- pyproject.toml skeleton with hatchling backend (workshop CLI lands in Phase 4)
-- Placeholder READMEs in `templates/`, `skills/`, `hooks/`, `src/joinery/`, `tests/` documenting which build phase fills each
+- Dogfooded `plan.md` (Joinery's own build plan)
+- Minimal OSS hygiene: CONTRIBUTING, SECURITY
 - `.gitattributes` for cross-platform LF normalization
-- Minimal OSS-readiness: CONTRIBUTING, CHANGELOG, SECURITY
 
-Subsequent phases will be logged here as they ship.
+### Known limitations
+
+- `workshop setup` not yet implemented (the doctor reports `~/.config/joinery/ MISSING` and tells you to run setup; the command lands when first needed)
+- External sync adapter pattern is spec'd but no skeleton ships yet
+- No GitHub Actions CI workflow; lint + typecheck + tests run locally only
+- Cross-platform CI testing deferred — Windows verified, Linux relies on pure stdlib + click + jinja2 portability
+- Deeper audit of `obra/superpowers` deferred to first real dogfood

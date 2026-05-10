@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-> Five starter rules for working on Joinery. Each is meant to be refined or replaced by `/rule` commits as real failures surface during the build. Don't add rules from theory.
+> Five starter rules for working on Joinery. Each is meant to be refined or replaced by `/rule` commits as real failures surface. Don't add rules from theory.
 
 1. **Think before coding.** State the problem in one paragraph before any edit. If the problem isn't clear in plain English, the code can't be either.
 
@@ -16,23 +16,16 @@
 
 ## Project context
 
-Joinery is a personal coding framework being built across 6 phases. See `plan.md` for the build plan, `docs/spec.md` for the full design spec, `docs/architecture.md` for a 1-page summary.
+Joinery is a personal coding framework for the AI-agent era — installable via `pip install -e .` and used in projects via `workshop init`. See `docs/architecture.md` for the system overview, `docs/spec.md` for the full design specification.
 
-This project is **production tier** — Joinery itself uses production-tier discipline (full plan-gate, tdd-gate, ADRs required, structured commits required, branch+PR required on all changes). The framework eats its own dogfood.
+This project runs on **production tier** — Joinery eats its own dogfood. Production tier discipline applies: branch + PR for all changes (no direct main pushes), Lore Protocol-flavored commit messages on commits over 10 lines changed, mypy --strict + ruff check + ruff format clean, all tests passing.
 
 ## Working on this codebase
 
-- Code style follows the workshop-level defaults (no emojis in code, comments earn their place, descriptive names, ISO dates, UTC times, forward slashes in paths even on Windows). See `docs/spec.md` §11 "Workshop-level defaults" for the full list.
-- All commits to production-tier projects use the Lore Protocol commit format above the threshold (see `docs/spec.md` §13).
-- Changes to `CLAUDE.md` happen through the `/rule` workflow (one rule per commit, linked to the failure that prompted it). See `docs/spec.md` §11.
+- Code style follows the workshop-level defaults: no emojis in code or configs, comments earn their place, descriptive names, ISO 8601 dates, UTC times, forward slashes in paths even on Windows. See `docs/spec.md` §11 "Workshop-level defaults" for the full list.
+- All production-tier commits over 10 lines use the Lore Protocol commit format (see `docs/spec.md` §13).
+- Changes to this `CLAUDE.md` happen through the `/rule` workflow (one rule per commit, linked to the failure that prompted it). See `docs/spec.md` §11.
 
-## Build phase status
+## v1 status
 
-Currently: **Phase 0 (Foundation)** — repo skeleton, root docs, ADRs.
-
-Subsequent phases:
-1. Project Templates (markdown files in `templates/`)
-2. Skills (markdown files in `skills/`)
-3. Hooks (bash scripts in `hooks/`)
-4. Workshop CLI (Python in `src/joinery/`)
-5. First Dogfood (real production work using Joinery)
+v0.1.0 shipped on 2026-05-10. The framework is functionally complete; next step is real-world dogfooding (Phase 5) to surface friction and iterate to v1.1. See `plan.md` and `CHANGELOG.md`.

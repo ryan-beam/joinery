@@ -1,6 +1,6 @@
 # Plan: Joinery v1
 
-**Status:** active
+**Status:** complete (v0.1.0 shipped); awaiting first dogfood (Phase 5)
 **Tier:** production
 **Last updated:** 2026-05-10
 **Related:** [`docs/spec.md`](docs/spec.md), [`docs/architecture.md`](docs/architecture.md), [`docs/decisions/0001-tier-as-risk-profile.md`](docs/decisions/0001-tier-as-risk-profile.md)
@@ -73,55 +73,29 @@ graph LR
 
 ## 3. Success criteria
 
-Phase 0 — Foundation (complete 2026-05-10):
-- [x] Repo exists locally with full directory tree per `docs/spec.md` §5
-- [x] `README.md` reads cleanly to a stranger; `what / why / status` are clear
-- [x] `CLAUDE.md` contains the 5-rule starter from spec §11
-- [x] `AGENTS.md` mirrors `CLAUDE.md`
-- [x] `plan.md` (this file) is genuinely useful, not ceremony
-- [x] First ADR records the foundational tier-as-risk-profile decision
-- [x] `docs/spec.md` is the canonical copy of the design specification
-- [x] All placeholder directories have a README explaining their role
-- [x] `pyproject.toml` skeleton has metadata, ruff/mypy/pytest tool configs
-- [x] First commit lands locally
-- [x] GitHub repo created at `ryan-beam/joinery` (private initially)
-- [x] First push lands on GitHub
+**v1 build delivered as v0.1.0 on 2026-05-10.** All Phases 0-4 shipped via feature branches and squash-merged to main:
 
-Phase 1 — Project Templates (complete 2026-05-10, on feature branch):
-- [x] All static markdown templates written
-- [x] Three `framework.config.toml` tier variants reflect spec §14 defaults
-- [x] Plan template flexibility honored (lengths flexible per section, Section 0 for context dumps)
-- [ ] Phase 1 PR opened, reviewed, and squash-merged to main
+- Phase 0 — Foundation (repo skeleton, root docs, first ADR)
+- Phase 1 — Project Templates (15 markdown + TOML templates)
+- Phase 2 — Skills (23 skill files, post-audit-cut from 25)
+- Phase 3 — Hooks (4 git hook bash scripts)
+- Phase 4 — Workshop CLI (Python click app, 42 tests passing, mypy/ruff clean)
 
-Phase 2 — Skills (complete 2026-05-10, on feature branch):
-- [x] All 23 skill files written with real content (post-audit cuts: was 25, dropped /plan-contracts and /plan-risks)
-- [x] Auto-invocation triggers explicit in each skill's frontmatter
-- [x] Audit-first applied: Claude Code built-ins identified for /review and /security-review (skills become thin wrappers); deeper /superpowers audit deferred to Phase 5 dogfooding
-- [ ] Phase 2 PR opened, reviewed, and squash-merged to main
+The framework is functionally complete and installable via `pip install -e .` from the repo. End-to-end smoke test verified: `workshop init` scaffolds correctly, `workshop doctor` reports cleanly.
 
-Phase 3 — Hooks (currently active, on feature branch):
-- [x] All 4 hook scripts under 50 lines (code-only count), fail loud and specific
-- [x] pre-push refuses direct main pushes on production tier
-- [x] pre-push reads `reviews/` and refuses on critical findings
-- [x] commit-msg enforces Lore Protocol structure on commits over threshold; bypasses trusted bot authors
-- [x] All hooks tier-aware (read .workshop/config.toml)
-- [x] Hooks are executable (chmod +x set)
-- [ ] Cross-platform tested (Windows Git Bash + Linux) — deferred to Phase 4 when CLI installs them into a real test project
-- [ ] Phase 3 PR opened, reviewed, and squash-merged to main
-
-Phase 4 — Workshop CLI (currently active, on feature branch):
-- [x] `workshop init` produces fully scaffolded directory across all 9 tier × lang permutations (test_init.py parametrized)
-- [x] All subcommands (`init`, `session start`, `session end`, `promote`, `doctor`) implemented and tested
-- [x] `pip install -e .` works on Windows (Linux untested locally; relies on pure stdlib + click + jinja2)
-- [x] Workshop CLI eats its own production-tier dogfood (mypy --strict clean, ruff check clean, ruff format clean, 42 pytest tests passing)
-- [x] End-to-end smoke test passes (`workshop init` scaffolds a real project; `workshop doctor` reports cleanly)
-- [ ] Phase 4 PR opened, reviewed, and squash-merged to main
-
-Phase 5 success criteria (later):
+**Phase 5 — First Dogfood** (next):
 - [ ] First feature shipped end-to-end on real production work via Joinery
 - [ ] At least 3 `/rule` commits captured from real friction
 - [ ] Adversarial review fired on real diffs and produced actionable findings
 - [ ] First weekly digest generated and read
+- [ ] v1.1 plan emerges from accumulated scars
+
+**Known v1 gaps** (deferred to v0.1.x or v1.1):
+- `workshop setup` command not yet implemented (doctor flags `~/.config/joinery/ MISSING`; setup lands when first needed)
+- External sync adapter pattern spec'd but no skeleton ships yet
+- GitHub Actions CI workflow not yet added (lint/typecheck/tests run locally only)
+- Cross-platform CI testing pending (Windows verified locally; Linux relies on pure stdlib + click + jinja2 portability)
+- Deeper audit of `obra/superpowers` deferred to first real dogfood
 
 ## 4. Forbidden actions
 
