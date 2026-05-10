@@ -6,6 +6,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Phase 4 — Workshop CLI (2026-05-10)
+
+The Python click-based workshop CLI. First executable code in the repo. Installs via `pip install -e .` (or `pipx install joinery-cli` once published).
+
+- **`workshop init <name>`** — scaffold a new Joinery project. Interactive when flags omitted; flag-driven for power users. Reads tier-variant templates, renders Jinja2 `{{var}}` placeholders, installs hooks into `.git/hooks/`, copies skills into `.claude/skills/`, initializes git, makes an initial commit.
+- **`workshop session start`** — reads HANDOVER.md, runs preflight checks (git status, plan freshness on production tier), prints session-start summary.
+- **`workshop session end`** — frames the session-end ritual; the actual explain-back/handover/sq-reconcile happens in the agent via the `workshop-session-end` skill.
+- **`workshop promote <project> --to <tier>`** — additive scaffold upgrade (sketch → standard → production). Refuses demotion. Updates `framework.config.toml`, adds missing directories/hooks, commits.
+- **`workshop doctor [--project P]`** — verifies workshop + project health (workshop config, ccstatusline, roborev, .workshop/config.toml validity, hooks installed, CLAUDE.md ↔ AGENTS.md sync, plan.md freshness on production).
+- **`workshop --version` / `workshop --help`** — standard click help; clear command tree.
+
+Modules:
+- `joinery.cli` — click entry point with subcommand tree
+- `joinery.init` — scaffold logic
+- `joinery.session` — session start/end framing
+- `joinery.promote` — additive tier upgrade
+- `joinery.doctor` — health checks
+- `joinery.lang` — language detection (`python` / `typescript` / `polyglot`)
+- `joinery.config` — `.workshop/config.toml` read helpers (uses stdlib `tomllib`)
+- `joinery.templates` — Jinja2 rendering with `StrictUndefined`
+- `joinery.git` — thin subprocess wrappers (init, add, commit, status)
+- `joinery.paths` — locate `templates/`, `hooks/`, `skills/` for both editable and wheel installs
+
+Dependencies: `click>=8.1`, `jinja2>=3.1`. Python 3.11+ (stdlib `tomllib`).
+
+Quality bar applied: mypy --strict clean across 11 source files, ruff check clean (E, W, F, I, B, C4, UP, S, N rule sets), ruff format clean (line-length 100), 42 pytest tests passing covering all 9 init permutations + session/promote/doctor + lang detection + config round-trip + template rendering. Path handling via `pathlib` throughout; no `os.path.join`. Subprocess only where genuinely needed (git operations).
+
 ### Phase 3 — Hooks (2026-05-10)
 
 4 git hook bash scripts that `workshop init` will install into `.git/hooks/` of scaffolded projects. The 5th hook (post-commit, for adversarial review) is managed by roborev, not Joinery.

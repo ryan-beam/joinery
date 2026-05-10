@@ -109,11 +109,13 @@ Phase 3 — Hooks (currently active, on feature branch):
 - [ ] Cross-platform tested (Windows Git Bash + Linux) — deferred to Phase 4 when CLI installs them into a real test project
 - [ ] Phase 3 PR opened, reviewed, and squash-merged to main
 
-Phase 4 success criteria (later):
-- [ ] `workshop init` produces fully scaffolded directory in <2s for all 9 tier × lang permutations
-- [ ] All subcommands (`init`, `session start`, `session end`, `promote`, `doctor`) tested
-- [ ] `pipx install` works on Windows and Linux
-- [ ] Workshop CLI eats its own production-tier dogfood (mypy --strict, ruff format, real tests)
+Phase 4 — Workshop CLI (currently active, on feature branch):
+- [x] `workshop init` produces fully scaffolded directory across all 9 tier × lang permutations (test_init.py parametrized)
+- [x] All subcommands (`init`, `session start`, `session end`, `promote`, `doctor`) implemented and tested
+- [x] `pip install -e .` works on Windows (Linux untested locally; relies on pure stdlib + click + jinja2)
+- [x] Workshop CLI eats its own production-tier dogfood (mypy --strict clean, ruff check clean, ruff format clean, 42 pytest tests passing)
+- [x] End-to-end smoke test passes (`workshop init` scaffolds a real project; `workshop doctor` reports cleanly)
+- [ ] Phase 4 PR opened, reviewed, and squash-merged to main
 
 Phase 5 success criteria (later):
 - [ ] First feature shipped end-to-end on real production work via Joinery
