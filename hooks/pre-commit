@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Joinery pre-commit hook.
+# Runs language-appropriate lint and type-check on staged files, syncs CLAUDE.md to AGENTS.md.
+# Tier-aware: reads .workshop/config.toml for tier, language, and per-hook toggles.
+# See https://github.com/ryan-beam/joinery/blob/main/docs/spec.md section 8 (Hook Catalog).
+
+set -euo pipefail
+
+CONFIG=".workshop/config.toml"
+[ ! -f "$CONFIG" ] && exit 0
+
+PYTHON=$(command -v python3 || command -v python || echo "")
+[ -z "$PYTHON" ] && { echo "pre-commit: python required but not found"; exit 1; }
+
+eval "$($PYTHON -c "
+import tomllib
+c = tomllib.load(open('$CONFIG', 'rb'))
+print(f'TIER={c[\"meta\"][\"tier\"]}')
+print(f'ENABLED={str(c[\"hooks\"][\"pre_commit\"]).lower()}')
+" 2>/dev/null)"
+
+[ "${ENABLED:-true}" != "true" ] && exit 0
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACM)
+PY_FILES=$(echo "$STAGED" | grep -E '\.py$' || true)
+TS_FILES=$(echo "$STAGED" | grep -E '\.(ts|tsx)$' || true)
+
+# Lint
+if [ -n "$PY_FILES" ] && command -v ruff >/dev/null; then
+    ruff check $PY_FILES || { echo "pre-commit failed: ruff check (see CLAUDE.md and docs/spec.md section 11)"; exit 1; }
+    ruff format --check $PY_FILES || { echo "pre-commit failed: ruff format (run 'ruff format' to fix)"; exit 1; }
+fi
+if [ -n "$TS_FILES" ] && command -v biome >/dev/null; then
+    biome check $TS_FILES || { echo "pre-commit failed: biome check"; exit 1; }
+fi
+
+# Type-check (production tier only)
+if [ "${TIER:-standard}" = "production" ]; then
+    if [ -n "$PY_FILES" ] && command -v mypy >/dev/null; then
+        mypy --strict $PY_FILES || { echo "pre-commit failed: mypy --strict (production tier requires strict typing)"; exit 1; }
+    fi
+    if [ -n "$TS_FILES" ] && command -v tsc >/dev/null; then
+        tsc --noEmit || { echo "pre-commit failed: tsc --noEmit (production tier)"; exit 1; }
+    fi
+fi
+
+# AGENTS.md mirror from CLAUDE.md
+if [ -f CLAUDE.md ] && [ -f AGENTS.md ] && ! diff -q CLAUDE.md AGENTS.md >/dev/null 2>&1; then
+    cp CLAUDE.md AGENTS.md
+    git add AGENTS.md
+fi
+
+exit 0

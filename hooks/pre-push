@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Joinery pre-push hook.
+# Last-line-of-defense before code leaves the local machine.
+# - Refuses direct main pushes on production tier (per [git.branching] require_branch)
+# - Reads reviews/ for critical findings, refuses if any are open
+# Tier-aware: reads .workshop/config.toml.
+# See docs/spec.md section 8 + section 13 for design.
+
+set -euo pipefail
+
+CONFIG=".workshop/config.toml"
+[ ! -f "$CONFIG" ] && exit 0
+
+PYTHON=$(command -v python3 || command -v python || echo "")
+[ -z "$PYTHON" ] && { echo "pre-push: python required but not found"; exit 1; }
+
+eval "$($PYTHON -c "
+import tomllib
+c = tomllib.load(open('$CONFIG', 'rb'))
+print(f'TIER={c[\"meta\"][\"tier\"]}')
+print(f'ENABLED={str(c[\"hooks\"][\"pre_push\"]).lower()}')
+print(f'REQUIRE_BRANCH={str(c[\"git\"][\"branching\"][\"require_branch\"]).lower()}')
+print(f'MAIN_BRANCH={c[\"git\"][\"branching\"][\"main_branch\"]}')
+" 2>/dev/null)"
+
+[ "${ENABLED:-true}" != "true" ] && exit 0
+
+# Refuse direct main pushes on production tier
+if [ "${REQUIRE_BRANCH:-true}" = "true" ]; then
+    while read -r local_ref local_sha remote_ref remote_sha; do
+        REMOTE_BRANCH="${remote_ref##*/}"
+        CURRENT=$(git branch --show-current)
+        if [ "$REMOTE_BRANCH" = "${MAIN_BRANCH:-main}" ] && [ "$CURRENT" = "$REMOTE_BRANCH" ]; then
+            echo "pre-push refused: production tier requires a feature branch for changes to '$REMOTE_BRANCH'."
+            echo "See docs/spec.md section 13 (Branching strategy). Create a feature branch:"
+            echo "  git checkout -b feat/<short-summary>"
+            echo "  git push -u origin feat/<short-summary>"
+            exit 1
+        fi
+    done
+fi
+
+# Read reviews/ for critical findings
+if [ -d reviews ]; then
+    BLOCKED=$(grep -l "^## Critical" reviews/*.md 2>/dev/null || true)
+    if [ -n "$BLOCKED" ]; then
+        echo "pre-push refused: critical adversarial review findings outstanding."
+        echo "Review and address before pushing:"
+        echo "$BLOCKED" | sed 's/^/  /'
+        echo "If a finding is a false positive, document the override in the review file then retry."
+        exit 1
+    fi
+fi
+
+exit 0

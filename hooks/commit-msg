@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Joinery commit-msg hook.
+# Enforces Lore Protocol structure on production-tier commits over the threshold.
+# Bypasses for trusted bot/daemon authors per [git] commit_structure_skip_authors.
+# See docs/spec.md section 13 (Git as Spine).
+
+set -euo pipefail
+
+CONFIG=".workshop/config.toml"
+COMMIT_MSG_FILE="$1"
+[ ! -f "$CONFIG" ] && exit 0
+[ ! -f "$COMMIT_MSG_FILE" ] && exit 0
+
+PYTHON=$(command -v python3 || command -v python || echo "")
+[ -z "$PYTHON" ] && { echo "commit-msg: python required but not found"; exit 1; }
+
+eval "$($PYTHON -c "
+import tomllib
+c = tomllib.load(open('$CONFIG', 'rb'))
+print(f'ENABLED={str(c[\"hooks\"][\"commit_msg\"]).lower()}')
+print(f'REQUIRE={str(c[\"git\"][\"require_structured_commits\"]).lower()}')
+print(f'THRESHOLD={c[\"git\"][\"structured_commit_threshold\"]}')
+authors = c['git']['commit_structure_skip_authors']
+print('SKIP_AUTHORS=' + chr(0x1f).join(authors))
+" 2>/dev/null)"
+
+[ "${ENABLED:-true}" != "true" ] && exit 0
+[ "${REQUIRE:-false}" != "true" ] && exit 0
+
+# Bypass for trusted bot authors
+AUTHOR=$(git config user.name 2>/dev/null || echo "")
+if [ -n "$AUTHOR" ] && [ -n "${SKIP_AUTHORS:-}" ]; then
+    if printf '%s' "$SKIP_AUTHORS" | tr "$(printf '\037')" '\n' | grep -Fxq "$AUTHOR"; then
+        exit 0
+    fi
+fi
+
+# Sub-threshold commits get a one-liner pass
+LINES_CHANGED=$(git diff --cached --shortstat 2>/dev/null | grep -oE '[0-9]+ (insertion|deletion)' | awk '{sum+=$1} END {print sum+0}' || echo "0")
+[ "${LINES_CHANGED:-0}" -lt "${THRESHOLD:-10}" ] && exit 0
+
+# Check Lore Protocol structure
+MSG=$(cat "$COMMIT_MSG_FILE")
+MISSING=""
+echo "$MSG" | grep -q "^context:" || MISSING="$MISSING context:"
+echo "$MSG" | grep -q "^decided:" || MISSING="$MISSING decided:"
+
+if [ -n "$MISSING" ]; then
+    echo "commit-msg refused: production tier requires Lore Protocol structure for commits over ${THRESHOLD:-10} lines changed."
+    echo "Missing fields:$MISSING"
+    echo ""
+    echo "See docs/spec.md section 13. Required structure:"
+    echo "  <scope>: <one-line summary>"
+    echo ""
+    echo "  context: <why this change>"
+    echo "  decided: <chosen approach>"
+    echo "  ref: <plan.md section, ADR, etc.>"
+    exit 1
+fi
+
+exit 0
