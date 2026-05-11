@@ -73,7 +73,11 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]  # assert is fine in tests
+# S101: assert is fine in tests.
+# S603/S607: tests legitimately invoke `git` (and similar) via PATH; the wrapper
+# in src/joinery/git.py already handles this with noqa, but tests sometimes need
+# to call git directly (e.g., setting per-call user.email, or rev-parse).
+"tests/**" = ["S101", "S603", "S607"]
 
 [tool.mypy]
 strict = true
