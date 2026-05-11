@@ -26,6 +26,7 @@ from joinery.templates import (
     render_context,
     select_config_template,
 )
+from joinery.transactions import Transaction, write_transaction
 
 PROJECT_TEMPLATES: tuple[str, ...] = (
     "CLAUDE.md.starter",
@@ -44,7 +45,7 @@ HOOK_NAMES: tuple[str, ...] = (
 
 
 def write_project_files(
-    target: Path, ctx: dict[str, Any], *, skip_existing: bool = False
+    target: Path, ctx: dict[str, Any], *, skip_existing: bool = False, dry_run: bool = False
 ) -> tuple[list[Path], list[Path]]:
     """Write CLAUDE.md, plan.md, HANDOVER.md, README.md, AGENTS.md from templates."""
     written: list[Path] = []
@@ -57,7 +58,7 @@ def write_project_files(
         target_name = _strip_template_suffix(tpl_name)
         dest = target / target_name
         rel = dest.relative_to(target)
-        if copy_template(src, dest, ctx, skip_existing=skip_existing):
+        if copy_template(src, dest, ctx, skip_existing=skip_existing, dry_run=dry_run):
             written.append(rel)
         else:
             preserved.append(rel)
@@ -65,14 +66,14 @@ def write_project_files(
 
 
 def write_learning_module(
-    target: Path, ctx: dict[str, Any], *, skip_existing: bool = False
+    target: Path, ctx: dict[str, Any], *, skip_existing: bool = False, dry_run: bool = False
 ) -> tuple[list[Path], list[Path]]:
     """Write the learning/ module templates."""
     learning_src = templates_dir() / "learning"
     if not learning_src.is_dir():
         return [], []
     written, preserved = copy_tree(
-        learning_src, target / "learning", ctx, skip_existing=skip_existing
+        learning_src, target / "learning", ctx, skip_existing=skip_existing, dry_run=dry_run
     )
     # copy_tree returns paths relative to its target_dir (learning/); re-root to project.
     return (
@@ -82,7 +83,7 @@ def write_learning_module(
 
 
 def write_tier_adr(
-    target: Path, ctx: dict[str, Any], *, skip_existing: bool = False
+    target: Path, ctx: dict[str, Any], *, skip_existing: bool = False, dry_run: bool = False
 ) -> tuple[list[Path], list[Path]]:
     """Write the tier-selection ADR (docs/decisions/0001-tier-selection.md)."""
     adr_src = templates_dir() / "docs" / "decisions" / "0001-tier-selection.md.template"
@@ -90,13 +91,18 @@ def write_tier_adr(
         return [], []
     adr_dest = target / "docs" / "decisions" / "0001-tier-selection.md"
     rel = adr_dest.relative_to(target)
-    if copy_template(adr_src, adr_dest, ctx, skip_existing=skip_existing):
+    if copy_template(adr_src, adr_dest, ctx, skip_existing=skip_existing, dry_run=dry_run):
         return [rel], []
     return [], [rel]
 
 
 def write_workshop_state(
-    target: Path, tier: str, ctx: dict[str, Any], *, skip_existing: bool = False
+    target: Path,
+    tier: str,
+    ctx: dict[str, Any],
+    *,
+    skip_existing: bool = False,
+    dry_run: bool = False,
 ) -> tuple[list[Path], list[Path]]:
     """Write .workshop/config.toml, .workshop/usage.jsonl, .workshop/tier.lock."""
     written: list[Path] = []
@@ -105,7 +111,7 @@ def write_workshop_state(
     config_src = select_config_template(tier)
     config_dest = target / ".workshop" / "config.toml"
     rel = config_dest.relative_to(target)
-    if copy_template(config_src, config_dest, ctx, skip_existing=skip_existing):
+    if copy_template(config_src, config_dest, ctx, skip_existing=skip_existing, dry_run=dry_run):
         written.append(rel)
     else:
         preserved.append(rel)
@@ -115,8 +121,9 @@ def write_workshop_state(
     if skip_existing and usage_log.exists():
         preserved.append(rel)
     else:
-        usage_log.parent.mkdir(parents=True, exist_ok=True)
-        usage_log.write_text("", encoding="utf-8")
+        if not dry_run:
+            usage_log.parent.mkdir(parents=True, exist_ok=True)
+            usage_log.write_text("", encoding="utf-8")
         written.append(rel)
 
     tier_lock = target / ".workshop" / "tier.lock"
@@ -124,14 +131,17 @@ def write_workshop_state(
     if skip_existing and tier_lock.exists():
         preserved.append(rel)
     else:
-        tier_lock.parent.mkdir(parents=True, exist_ok=True)
-        tier_lock.write_text(tier + "\n", encoding="utf-8")
+        if not dry_run:
+            tier_lock.parent.mkdir(parents=True, exist_ok=True)
+            tier_lock.write_text(tier + "\n", encoding="utf-8")
         written.append(rel)
 
     return written, preserved
 
 
-def install_skills(target: Path, *, skip_existing: bool = False) -> tuple[list[Path], list[Path]]:
+def install_skills(
+    target: Path, *, skip_existing: bool = False, dry_run: bool = False
+) -> tuple[list[Path], list[Path]]:
     """Copy skills/*.md into .claude/skills/ for Claude Code recognition."""
     written: list[Path] = []
     preserved: list[Path] = []
@@ -146,13 +156,13 @@ def install_skills(target: Path, *, skip_existing: bool = False) -> tuple[list[P
         if skip_existing and dest.exists():
             preserved.append(rel)
             continue
-        copy_static(skill_file, dest)
+        copy_static(skill_file, dest, dry_run=dry_run)
         written.append(rel)
     return written, preserved
 
 
 def install_hooks_into(
-    target: Path, *, skip_existing: bool = False
+    target: Path, *, skip_existing: bool = False, dry_run: bool = False
 ) -> tuple[list[Path], list[Path]]:
     """Install git hooks into .git/hooks/.
 
@@ -176,7 +186,8 @@ def install_hooks_into(
         if skip_existing and hook_target.exists():
             preserved.append(rel)
             continue
-        git.install_hook(hook_file, target)
+        if not dry_run:
+            git.install_hook(hook_file, target)
         written.append(rel)
     return written, preserved
 
@@ -187,28 +198,40 @@ def scaffold(
     tier: str,
     language: str,
     init_git: bool = True,
+    dry_run: bool = False,
 ) -> list[Path]:
-    """Scaffold a new project at the target path. Returns list of files created."""
+    """Scaffold a new project at the target path. Returns list of files created.
+
+    When `dry_run=True`, no filesystem mutations occur. The returned list
+    reflects what *would* have been written.
+    """
     if target.exists() and any(target.iterdir()):
         raise FileExistsError(
             f"Directory `{target}` already exists and is not empty. "
             f"Pick a different name or remove the directory first."
         )
-    target.mkdir(parents=True, exist_ok=True)
+    if not dry_run:
+        target.mkdir(parents=True, exist_ok=True)
 
     ctx = render_context(project_name=project_name, tier=tier, language=language)
 
     written: list[Path] = []
-    written += write_project_files(target, ctx)[0]
-    written += write_learning_module(target, ctx)[0]
-    written += write_tier_adr(target, ctx)[0]
-    written += write_workshop_state(target, tier, ctx)[0]
-    written += install_skills(target)[0]
+    written += write_project_files(target, ctx, dry_run=dry_run)[0]
+    written += write_learning_module(target, ctx, dry_run=dry_run)[0]
+    written += write_tier_adr(target, ctx, dry_run=dry_run)[0]
+    written += write_workshop_state(target, tier, ctx, dry_run=dry_run)[0]
+    written += install_skills(target, dry_run=dry_run)[0]
 
     hook_names_installed: list[str] = []
     if init_git:
-        git.init_repo(target)
-        hook_paths = install_hooks_into(target)[0]
+        if not dry_run:
+            git.init_repo(target)
+            hook_paths = install_hooks_into(target)[0]
+        else:
+            # Without a real git repo we can't call install_hooks_into (it
+            # checks .git/hooks/). Synthesize the would-be hook list directly
+            # from HOOK_NAMES, matching what install_hooks_into would return.
+            hook_paths = [Path(".git") / "hooks" / h for h in HOOK_NAMES]
         hook_names_installed = [p.name for p in hook_paths]
         written += hook_paths
 
@@ -220,13 +243,27 @@ def scaffold(
         managed_files=[str(p) for p in written],
         hooks_installed=hook_names_installed,
     )
-    manifest_path = write_manifest(target, manifest)
-    written.append(manifest_path.relative_to(target))
+    if not dry_run:
+        manifest_path = write_manifest(target, manifest)
+        written.append(manifest_path.relative_to(target))
+    else:
+        written.append(Path(".workshop") / "answers.toml")
 
-    if init_git:
+    if init_git and not dry_run:
         git.add_all(target)
         commit_msg = f"joinery: bench setup, tier={tier}"
         git.commit(target, commit_msg)
+
+    if not dry_run:
+        txn = Transaction(
+            mode="init",
+            tier=tier,
+            language=language,
+            project_name=project_name,
+            written_files=[str(p) for p in written],
+            hooks_installed=hook_names_installed,
+        )
+        write_transaction(target, txn)
 
     return written
 

@@ -269,6 +269,33 @@ def test_adopt_backs_up_existing_hooks_before_install(tmp_path: Path) -> None:
     assert "user hook" in (result.hooks_backup / "pre-commit").read_text(encoding="utf-8")
 
 
+def test_adopt_dry_run_does_not_write_any_files(tmp_path: Path) -> None:
+    target = _make_existing_project(tmp_path)
+    result = adopt(target, tier="production", language="python", dry_run=True)
+    assert not (target / "CLAUDE.md").exists()
+    assert not (target / "plan.md").exists()
+    assert not (target / ".workshop").exists()
+    assert not (target / ".joinery").exists()
+    # But the return value reflects what would have happened
+    assert any(p == Path("CLAUDE.md") for p in result.written)
+    assert result.dry_run is True
+
+
+def test_adopt_dry_run_does_not_write_transaction_log(tmp_path: Path) -> None:
+    target = _make_existing_project(tmp_path)
+    adopt(target, tier="production", language="python", dry_run=True)
+    assert not (target / ".joinery" / "transactions").exists()
+
+
+def test_adopt_real_run_writes_transaction_log(tmp_path: Path) -> None:
+    target = _make_existing_project(tmp_path)
+    adopt(target, tier="production", language="python")
+    txn_dir = target / ".joinery" / "transactions"
+    assert txn_dir.is_dir()
+    txns = list(txn_dir.glob("*.json"))
+    assert len(txns) == 1
+
+
 def test_adopt_safety_report_warns_about_env(tmp_path: Path) -> None:
     target = _make_existing_project(tmp_path)
     (target / ".env").write_text("API_KEY=x\n", encoding="utf-8")

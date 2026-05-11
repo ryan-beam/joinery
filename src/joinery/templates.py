@@ -47,15 +47,24 @@ def _render_text(content: str, ctx: dict[str, Any]) -> str:
 
 
 def copy_template(
-    source: Path, target: Path, ctx: dict[str, Any], *, skip_existing: bool = False
+    source: Path,
+    target: Path,
+    ctx: dict[str, Any],
+    *,
+    skip_existing: bool = False,
+    dry_run: bool = False,
 ) -> bool:
     """Copy a single template file from source to target, rendering placeholders.
 
-    Returns True if the file was written, False if it was preserved (only possible
-    when skip_existing=True and target already exists).
+    Returns True if the file was written (or *would be* written under dry_run),
+    False if it was preserved (only possible when skip_existing=True and target
+    already exists). When `dry_run=True`, no filesystem mutation occurs, but
+    the return value still reflects what would have happened.
     """
     if skip_existing and target.exists():
         return False
+    if dry_run:
+        return True
     target.parent.mkdir(parents=True, exist_ok=True)
     content = source.read_text(encoding="utf-8")
     rendered = _render_text(content, ctx)
@@ -69,11 +78,14 @@ def copy_tree(
     ctx: dict[str, Any],
     *,
     skip_existing: bool = False,
+    dry_run: bool = False,
 ) -> tuple[list[Path], list[Path]]:
     """Recursively copy a template tree into target_dir, rendering each file.
 
     Returns (written, preserved): both lists hold paths relative to target_dir.
-    The preserved list is always empty when skip_existing=False.
+    The preserved list is always empty when skip_existing=False. Under
+    `dry_run=True`, no files are written but the return value reflects what
+    would have happened.
     """
     written: list[Path] = []
     preserved: list[Path] = []
@@ -86,7 +98,9 @@ def copy_tree(
         target_name = _strip_template_suffix(relative.name)
         target_file = target_dir / relative.with_name(target_name)
         rel_out = target_file.relative_to(target_dir)
-        if copy_template(source_file, target_file, ctx, skip_existing=skip_existing):
+        if copy_template(
+            source_file, target_file, ctx, skip_existing=skip_existing, dry_run=dry_run
+        ):
             written.append(rel_out)
         else:
             preserved.append(rel_out)
@@ -109,7 +123,9 @@ def select_config_template(tier: str) -> Path:
     return path
 
 
-def copy_static(source: Path, target: Path) -> None:
-    """Copy a file without template rendering."""
+def copy_static(source: Path, target: Path, *, dry_run: bool = False) -> None:
+    """Copy a file without template rendering. No-op when dry_run=True."""
+    if dry_run:
+        return
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, target)

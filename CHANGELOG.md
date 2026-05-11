@@ -68,9 +68,28 @@ Hook backup is always non-destructive. Existing non-`.sample` files in `.git/hoo
 
 New module `src/joinery/preadopt.py` with `PreAdoptReport` dataclass, `UnsafeAdoptError`, `scan()`, and `backup_hooks()`. 16 new unit tests in `tests/test_preadopt.py`; 5 new integration tests in `tests/test_adopt.py` covering dirty-tree refusal, `--allow-dirty` bypass, `--no-scan` bypass, hook backup, and sensitive-path warnings.
 
+### Added — `--dry-run` flag + transaction log + `workshop rollback`
+
+Three changes that together give Joinery a full preview/audit/undo loop on top of `init` and `adopt`:
+
+- **`--dry-run` on `init` and `adopt`** — previews exactly what would be written without touching the filesystem. The pre-adopt safety scan still runs (read-only). The return value reflects what would have happened so callers can show a diff. No git operations, no manifest write, no transaction log, no hook backup.
+- **Transaction log at `.joinery/transactions/<timestamp>.json`** — every real (non-dry-run) `init` or `adopt` appends a JSON record listing every file written, every file preserved, every hook installed, and the path to any hook backup. Append-only audit trail; Joinery never modifies an existing transaction.
+- **`workshop rollback`** — undoes the most recent transaction. Deletes every file the transaction wrote (unless `--keep-files`), restores hooks from the recorded backup, and removes the transaction record. Bounded to the most recent operation — for older history, use git.
+
+New modules:
+- `src/joinery/transactions.py` — `Transaction` dataclass, `write_transaction()`, `read_transaction()`, `list_transactions()`, `latest_transaction()`. JSON storage (stdlib `json`, no new deps).
+- `src/joinery/rollback.py` — `rollback()` function + `NoTransactionError`. Restores hooks via `shutil.copy2` from the backup directory captured in the transaction.
+
+New tests: 9 in `tests/test_transactions.py` (round-trip, chronological listing, invalid-mode rejection); 7 in `tests/test_rollback.py` (init + adopt rollback, hook restore, user-file preservation, --keep-files, graceful handling of already-deleted files); 5 in `tests/test_adopt.py` and `tests/test_init.py` combined (dry-run produces no writes, transaction log written on real runs).
+
+CLI changes:
+- `workshop init` and `workshop adopt`: new `--dry-run` flag.
+- `workshop rollback` (new subcommand): `--path P`, `--keep-files`, `--yes` (skip confirmation).
+- Adoption summary now uses "Would write" / "Would preserve" verbs under `--dry-run` and prints "Dry run complete — re-run without --dry-run to apply."
+
 ### Tests
 
-18 new tests in `tests/test_adopt.py` (adopt), 8 in `tests/test_manifest.py` (round-trip + edge cases), 16 in `tests/test_preadopt.py` (safety scan + backup), and 3 additions each to `test_init.py` and `test_adopt.py` covering answer-file content and marker presence. Full suite now 96 passing (was 42 at v0.1.0).
+18 new tests in `tests/test_adopt.py` (adopt), 8 in `tests/test_manifest.py` (round-trip + edge cases), 16 in `tests/test_preadopt.py` (safety scan + backup), 9 in `tests/test_transactions.py` (audit log), 7 in `tests/test_rollback.py` (undo flow), and 3 additions each to `test_init.py` and `test_adopt.py` covering answer-file content + marker presence. Full suite now 117 passing (was 42 at v0.1.0).
 
 ## [0.1.0] — 2026-05-10
 
