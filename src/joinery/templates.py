@@ -46,6 +46,15 @@ def _render_text(content: str, ctx: dict[str, Any]) -> str:
     return template.render(**ctx)
 
 
+def render_template_file(source: Path, ctx: dict[str, Any]) -> str:
+    """Read a template file and return its rendered string. No filesystem writes.
+
+    Public helper for diff/update flows that need the rendered content without
+    actually copying it to a target path.
+    """
+    return _render_text(source.read_text(encoding="utf-8"), ctx)
+
+
 def copy_template(
     source: Path,
     target: Path,

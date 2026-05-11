@@ -157,6 +157,9 @@ def adopt(
         preserved_files=[str(p) for p in result.preserved],
         hooks_installed=[p.name for p in result.hooks_written],
         hooks_preserved=[p.name for p in result.hooks_preserved],
+        # Tie the manifest timestamp to the same `init_at` rendered into the
+        # files so `workshop diff` doesn't show spurious timestamp drift.
+        created_at=str(ctx["init_at"]),
     )
     if not dry_run:
         manifest_path = write_manifest(target, manifest)

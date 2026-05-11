@@ -51,8 +51,10 @@ def write_transaction(target: Path, txn: Transaction) -> Path:
     `list_transactions()` returns them in chronological order naturally.
     """
     if not txn.timestamp:
-        txn.timestamp = datetime.now(tz=UTC).isoformat(timespec="seconds")
-    stamp = datetime.fromisoformat(txn.timestamp).astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
+        # microsecond precision so two transactions in the same second still
+        # produce distinct filenames (e.g., init then update fired back-to-back)
+        txn.timestamp = datetime.now(tz=UTC).isoformat(timespec="microseconds")
+    stamp = datetime.fromisoformat(txn.timestamp).astimezone(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     txn_dir = target / TRANSACTIONS_RELDIR
     txn_dir.mkdir(parents=True, exist_ok=True)
     path = txn_dir / f"{stamp}.json"

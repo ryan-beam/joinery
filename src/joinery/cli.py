@@ -4,6 +4,8 @@ Subcommands:
     workshop init <name> [--tier T] [--lang L] [--git/--no-git] [--dry-run]
     workshop adopt [--tier T] [--lang L] [--path P] [--force] [--no-hooks] [--dry-run]
     workshop rollback [--path P] [--keep-files] [--yes]
+    workshop diff [--path P]
+    workshop update [--path P] [--dry-run] [--yes]
     workshop session start
     workshop session end
     workshop promote <project> --to <tier>
@@ -18,12 +20,14 @@ import click
 
 from joinery import __version__
 from joinery.adopt import AdoptResult, AlreadyAdoptedError, adopt, language_at_adopt
+from joinery.diff import DiffReport, NotAdoptedError, diff_managed_files
 from joinery.doctor import run_doctor
 from joinery.init import scaffold
 from joinery.preadopt import UnsafeAdoptError
 from joinery.promote import promote_project
 from joinery.rollback import NoTransactionError, RollbackResult, rollback
 from joinery.session import session_end, session_start
+from joinery.update import UpdateResult, apply_updates
 
 
 @click.group(invoke_without_command=True)
@@ -376,6 +380,134 @@ def _print_rollback_summary(result: RollbackResult, keep_files: bool) -> None:
     if result.transaction_path is not None:
         click.echo("")
         click.echo(f"Transaction record removed: {result.transaction_path.name}")
+
+
+@main.command("diff")
+@click.option(
+    "--path",
+    type=click.Path(exists=True, file_okay=False),
+    help="Project to inspect. Default: current working directory.",
+)
+def diff_command(path: str | None) -> None:
+    """Show drift between current managed files and current Joinery templates.
+
+    Read-only. Compares every rendered managed file (CLAUDE.md, plan.md,
+    learning/, ADR, .workshop/config.toml) against what Joinery would produce
+    today. Reports per-file status plus a unified diff for drifted files.
+    """
+    target = Path(path).resolve() if path else Path.cwd()
+    try:
+        report = diff_managed_files(target)
+    except NotAdoptedError as exc:
+        raise click.ClickException(str(exc)) from exc
+    _print_diff_report(report)
+
+
+def _print_diff_report(report: DiffReport) -> None:
+    """Print a diff report to stdout."""
+    if report.manifest_version != report.current_version:
+        click.echo(
+            f"Joinery version: manifest={report.manifest_version} -> "
+            f"current={report.current_version}"
+        )
+
+    if not report.has_drift:
+        click.echo("No drift. Managed files match current templates.")
+        return
+
+    if report.drifted:
+        click.echo("")
+        click.echo(f"Drifted ({len(report.drifted)}):")
+        for entry in report.drifted:
+            click.echo(f"  ~ {entry.rel_path}")
+        click.echo("")
+        for entry in report.drifted:
+            click.echo(f"=== {entry.rel_path} ===")
+            click.echo(entry.unified_diff)
+
+    if report.missing:
+        click.echo("")
+        click.echo(f"Missing ({len(report.missing)}) — managed but not on disk:")
+        for entry in report.missing:
+            click.echo(f"  ! {entry.rel_path}")
+
+    if report.clean:
+        click.echo("")
+        click.echo(f"Clean: {len(report.clean)} file(s) match current templates.")
+
+    click.echo("")
+    click.echo("Run `workshop update` to apply.")
+
+
+@main.command("update")
+@click.option(
+    "--path",
+    type=click.Path(exists=True, file_okay=False),
+    help="Project to update. Default: current working directory.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Preview what would change without writing.",
+)
+@click.option(
+    "--yes",
+    "skip_confirm",
+    is_flag=True,
+    default=False,
+    help="Skip the confirmation prompt.",
+)
+def update_command(path: str | None, dry_run: bool, skip_confirm: bool) -> None:
+    """Apply pending drift — bring managed files in sync with current templates.
+
+    Reads the diff via `workshop diff` machinery and writes the freshly-rendered
+    template content for any drifted or missing managed file. On success
+    refreshes `.workshop/answers.toml` with the current Joinery version and
+    appends a new transaction log entry.
+    """
+    target = Path(path).resolve() if path else Path.cwd()
+
+    try:
+        # Run a diff first so the user sees what will change before confirming.
+        report = diff_managed_files(target)
+    except NotAdoptedError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    pending = list(report.drifted) + list(report.missing)
+    if not pending:
+        click.echo("No drift. Nothing to update.")
+        return
+
+    click.echo(f"Pending updates: {len(pending)}")
+    for entry in pending:
+        marker = "~" if entry.status == "drifted" else "!"
+        click.echo(f"  {marker} {entry.rel_path}")
+
+    if dry_run:
+        click.echo("")
+        click.echo("Dry run — re-run without --dry-run to apply.")
+        return
+
+    if not skip_confirm and not click.confirm("Apply these updates?", default=False):
+        click.echo("Aborted.")
+        return
+
+    result = apply_updates(target, dry_run=False)
+    _print_update_summary(result)
+
+
+def _print_update_summary(result: UpdateResult) -> None:
+    """Print human-readable summary of an apply_updates() call."""
+    click.echo("")
+    click.echo(
+        f"Updated {len(result.applied)} file(s) "
+        f"(joinery {result.from_version} -> {result.to_version})"
+    )
+    for rel in result.applied[:20]:
+        click.echo(f"  ~ {rel}")
+    if len(result.applied) > 20:
+        click.echo(f"  ... and {len(result.applied) - 20} more")
 
 
 @main.group("session")

@@ -87,9 +87,33 @@ CLI changes:
 - `workshop rollback` (new subcommand): `--path P`, `--keep-files`, `--yes` (skip confirmation).
 - Adoption summary now uses "Would write" / "Would preserve" verbs under `--dry-run` and prints "Dry run complete — re-run without --dry-run to apply."
 
+### Added — `workshop diff` + `workshop update`
+
+The payoff for the answer-file foundation: Joinery can now detect and apply drift between a project's managed files and the framework's current templates.
+
+- **`workshop diff`** — read-only. For every rendered file Joinery manages (CLAUDE.md, plan.md, AGENTS.md, HANDOVER.md, README.md, learning/, ADR, `.workshop/config.toml`), compares the on-disk content against what the current templates would produce. Prints per-file status (clean / drifted / missing) and a unified diff per drifted file. Also surfaces `joinery_version` bumps (manifest version → current).
+- **`workshop update`** — apply pending drift. Walks the diff, writes the freshly-rendered template content for each drifted or missing file, refreshes `.workshop/answers.toml` to record the current Joinery version, and appends a new transaction log entry. Supports `--dry-run`, `--yes`, and `--path`.
+
+**Stable diff context.** Time-based template variables (`init_at`, `date`, `last_session_end`, `week`) are pinned to the manifest's `created_at` during diff, so the report shows real drift (template content changes, version bumps) rather than noise from clock movement. To make this work, `init` and `adopt` now both pass `ctx["init_at"]` as the manifest's `created_at` so the value rendered into the project's files matches the value the diff reads back.
+
+**Scope.** Drift detection covers RENDERED files only. Non-rendered managed files (hooks, skills, `.workshop/usage.jsonl`, `.workshop/tier.lock`, `.workshop/answers.toml`) are excluded — they don't carry template content. Preserved (user-owned) files are never touched.
+
+New modules:
+- `src/joinery/diff.py` — `DiffReport`, `FileDiff`, `diff_managed_files()`, `render_managed_state()`, `NotAdoptedError`. Uses stdlib `difflib.unified_diff`.
+- `src/joinery/update.py` — `UpdateResult`, `apply_updates()`. Writes managed-file updates, refreshes the manifest, appends a transaction.
+- `src/joinery/templates.py`: new public helper `render_template_file()` for diff/update flows that need rendered content without filesystem writes.
+
+CLI changes:
+- `workshop diff [--path P]` — new read-only subcommand.
+- `workshop update [--path P] [--dry-run] [--yes]` — new subcommand. Confirms before writing unless `--yes`.
+
+New tests: 7 in `tests/test_diff.py` (clean state, user edit detection, missing file, non-rendered file exclusion, stable time context, render_managed_state coverage), 9 in `tests/test_update.py` (no-op, drift application, missing-file restoration, dry-run, transaction recorded, manifest version refresh, --only filter, diff-update round-trip).
+
+Internal: `transactions.write_transaction()` now uses microsecond-precision timestamps in filenames so two transactions in the same second (e.g., init then update) produce distinct files.
+
 ### Tests
 
-18 new tests in `tests/test_adopt.py` (adopt), 8 in `tests/test_manifest.py` (round-trip + edge cases), 16 in `tests/test_preadopt.py` (safety scan + backup), 9 in `tests/test_transactions.py` (audit log), 7 in `tests/test_rollback.py` (undo flow), and 3 additions each to `test_init.py` and `test_adopt.py` covering answer-file content + marker presence. Full suite now 117 passing (was 42 at v0.1.0).
+18 new tests in `tests/test_adopt.py` (adopt), 8 in `tests/test_manifest.py` (round-trip + edge cases), 16 in `tests/test_preadopt.py` (safety scan + backup), 9 in `tests/test_transactions.py` (audit log), 7 in `tests/test_rollback.py` (undo flow), 7 in `tests/test_diff.py` (drift detection), 9 in `tests/test_update.py` (apply drift), and 3 additions each to `test_init.py` and `test_adopt.py` covering answer-file content + marker presence. Full suite now 133 passing (was 42 at v0.1.0).
 
 ## [0.1.0] — 2026-05-10
 
