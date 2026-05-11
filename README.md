@@ -53,7 +53,9 @@ Both `init` and `adopt` write a `.workshop/answers.toml` file recording what Joi
 
 Add `--dry-run` to either `init` or `adopt` to preview the operation without writing anything. Every real run records a transaction at `.joinery/transactions/<timestamp>.json`; `workshop rollback` undoes the most recent transaction (deletes the files it wrote, restores any hook backup).
 
-Run `workshop --help` to see all subcommands (`init`, `adopt`, `rollback`, `session`, `promote`, `doctor`).
+`workshop diff` shows drift between your project's managed files and Joinery's current templates (read-only); `workshop update` applies it (with confirmation, plus `--dry-run` for preview). Only files Joinery wrote are touched — your edits to preserved files are never affected.
+
+Run `workshop --help` to see all subcommands (`init`, `adopt`, `rollback`, `diff`, `update`, `session`, `promote`, `doctor`).
 
 ## What's in the box
 

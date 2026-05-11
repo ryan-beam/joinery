@@ -242,6 +242,10 @@ def scaffold(
         mode="init",
         managed_files=[str(p) for p in written],
         hooks_installed=hook_names_installed,
+        # Tie the manifest timestamp to the same `init_at` that was rendered
+        # into the config + templates, so future `workshop diff` sees no
+        # spurious drift on timestamp fields.
+        created_at=str(ctx["init_at"]),
     )
     if not dry_run:
         manifest_path = write_manifest(target, manifest)
