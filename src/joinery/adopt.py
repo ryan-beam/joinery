@@ -29,6 +29,7 @@ from joinery.lang import Language, detect_language
 from joinery.manifest import Manifest, write_manifest
 from joinery.preadopt import PreAdoptReport, UnsafeAdoptError, backup_hooks, scan
 from joinery.templates import render_context
+from joinery.transactions import Transaction, write_transaction
 
 
 @dataclass
@@ -43,6 +44,7 @@ class AdoptResult:
     hooks_skipped: bool = False
     safety_report: PreAdoptReport = field(default_factory=PreAdoptReport)
     hooks_backup: Path | None = None
+    dry_run: bool = False
 
 
 class AlreadyAdoptedError(RuntimeError):
@@ -58,6 +60,7 @@ def adopt(
     install_hooks: bool = True,
     allow_dirty: bool = False,
     skip_scan: bool = False,
+    dry_run: bool = False,
 ) -> AdoptResult:
     """Overlay Joinery onto an existing codebase at `target`.
 
@@ -116,29 +119,30 @@ def adopt(
     project_name = target.resolve().name
     ctx = render_context(project_name=project_name, tier=tier, language=language)
 
-    result = AdoptResult(is_git_repo=is_git_repo, safety_report=report)
+    result = AdoptResult(is_git_repo=is_git_repo, safety_report=report, dry_run=dry_run)
 
     for writer in (
         write_project_files,
         write_learning_module,
         write_tier_adr,
     ):
-        w, p = writer(target, ctx, skip_existing=skip_existing)
+        w, p = writer(target, ctx, skip_existing=skip_existing, dry_run=dry_run)
         result.written.extend(w)
         result.preserved.extend(p)
 
-    w, p = write_workshop_state(target, tier, ctx, skip_existing=skip_existing)
+    w, p = write_workshop_state(target, tier, ctx, skip_existing=skip_existing, dry_run=dry_run)
     result.written.extend(w)
     result.preserved.extend(p)
 
-    w, p = install_skills(target, skip_existing=skip_existing)
+    w, p = install_skills(target, skip_existing=skip_existing, dry_run=dry_run)
     result.written.extend(w)
     result.preserved.extend(p)
 
     if install_hooks:
         if is_git_repo:
-            result.hooks_backup = backup_hooks(target)
-            hw, hp = install_hooks_into(target, skip_existing=skip_existing)
+            if not dry_run:
+                result.hooks_backup = backup_hooks(target)
+            hw, hp = install_hooks_into(target, skip_existing=skip_existing, dry_run=dry_run)
             result.hooks_written = hw
             result.hooks_preserved = hp
         else:
@@ -154,8 +158,23 @@ def adopt(
         hooks_installed=[p.name for p in result.hooks_written],
         hooks_preserved=[p.name for p in result.hooks_preserved],
     )
-    manifest_path = write_manifest(target, manifest)
-    result.written.append(manifest_path.relative_to(target))
+    if not dry_run:
+        manifest_path = write_manifest(target, manifest)
+        result.written.append(manifest_path.relative_to(target))
+
+        txn = Transaction(
+            mode="adopt",
+            tier=tier,
+            language=language,
+            project_name=project_name,
+            written_files=[str(p) for p in result.written],
+            preserved_files=[str(p) for p in result.preserved],
+            hooks_installed=[p.name for p in result.hooks_written],
+            hooks_backup_path=str(result.hooks_backup) if result.hooks_backup else None,
+        )
+        write_transaction(target, txn)
+    else:
+        result.written.append(Path(".workshop") / "answers.toml")
 
     return result
 

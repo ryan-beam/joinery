@@ -1,8 +1,9 @@
 """Workshop CLI entry point.
 
 Subcommands:
-    workshop init <name> [--tier T] [--lang L] [--git/--no-git]
-    workshop adopt [--tier T] [--lang L] [--path P] [--force] [--no-hooks]
+    workshop init <name> [--tier T] [--lang L] [--git/--no-git] [--dry-run]
+    workshop adopt [--tier T] [--lang L] [--path P] [--force] [--no-hooks] [--dry-run]
+    workshop rollback [--path P] [--keep-files] [--yes]
     workshop session start
     workshop session end
     workshop promote <project> --to <tier>
@@ -21,6 +22,7 @@ from joinery.doctor import run_doctor
 from joinery.init import scaffold
 from joinery.preadopt import UnsafeAdoptError
 from joinery.promote import promote_project
+from joinery.rollback import NoTransactionError, RollbackResult, rollback
 from joinery.session import session_end, session_start
 
 
@@ -47,12 +49,19 @@ def main(ctx: click.Context) -> None:
 )
 @click.option("--git/--no-git", default=True, help="Initialize a git repo. Default: yes.")
 @click.option("--path", type=click.Path(), help="Where to scaffold. Default: ./<name>.")
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Preview what would be written without touching the filesystem.",
+)
 def init_command(
     name: str | None,
     tier: str | None,
     lang: str | None,
     git: bool,
     path: str | None,
+    dry_run: bool,
 ) -> None:
     """Scaffold a new Joinery project.
 
@@ -82,7 +91,10 @@ def init_command(
 
     target = Path(path) if path else Path.cwd() / name
 
-    click.echo(f"Creating {target}/")
+    if dry_run:
+        click.echo(f"DRY RUN — Would create {target}/ (no files written)")
+    else:
+        click.echo(f"Creating {target}/")
     try:
         written = scaffold(
             target=target,
@@ -90,6 +102,7 @@ def init_command(
             tier=tier,
             language=lang,
             init_git=git,
+            dry_run=dry_run,
         )
     except FileExistsError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -98,6 +111,11 @@ def init_command(
         click.echo(f"  + {rel}")
     if len(written) > 20:
         click.echo(f"  ... and {len(written) - 20} more")
+
+    if dry_run:
+        click.echo("")
+        click.echo("Dry run complete — re-run without --dry-run to write these files.")
+        return
 
     click.echo("")
     click.echo("Bench is set up. Next:")
@@ -150,6 +168,12 @@ def init_command(
     default=False,
     help="Skip the pre-adopt safety scan entirely. Not recommended for normal use.",
 )
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Preview what would be written without touching the filesystem.",
+)
 def adopt_command(
     tier: str | None,
     lang: str | None,
@@ -158,6 +182,7 @@ def adopt_command(
     skip_hooks: bool,
     allow_dirty: bool,
     skip_scan: bool,
+    dry_run: bool,
 ) -> None:
     """Overlay Joinery onto an existing codebase.
 
@@ -186,7 +211,8 @@ def adopt_command(
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    click.echo(f"Adopting Joinery into {target}/ (tier={tier}, lang={language})")
+    header = "DRY RUN — would adopt" if dry_run else "Adopting"
+    click.echo(f"{header} Joinery into {target}/ (tier={tier}, lang={language})")
     if force:
         click.echo("  --force: existing framework files will be overwritten.")
 
@@ -199,6 +225,7 @@ def adopt_command(
             install_hooks=not skip_hooks,
             allow_dirty=allow_dirty,
             skip_scan=skip_scan,
+            dry_run=dry_run,
         )
     except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
@@ -237,9 +264,12 @@ def _print_adopt_summary(result: AdoptResult, skip_hooks: bool) -> None:
         click.echo("")
         click.echo(f"Backed up existing hooks to: {result.hooks_backup}")
 
+    written_verb = "Would write" if result.dry_run else "Wrote"
+    preserved_verb = "Would preserve" if result.dry_run else "Preserved"
+
     if all_written:
         click.echo("")
-        click.echo(f"Wrote {len(all_written)} file(s):")
+        click.echo(f"{written_verb} {len(all_written)} file(s):")
         for rel in all_written[:20]:
             click.echo(f"  + {rel}")
         if len(all_written) > 20:
@@ -247,7 +277,7 @@ def _print_adopt_summary(result: AdoptResult, skip_hooks: bool) -> None:
 
     if all_preserved:
         click.echo("")
-        click.echo(f"Preserved {len(all_preserved)} existing file(s):")
+        click.echo(f"{preserved_verb} {len(all_preserved)} existing file(s):")
         for rel in all_preserved[:10]:
             click.echo(f"  = {rel}")
         if len(all_preserved) > 10:
@@ -260,11 +290,92 @@ def _print_adopt_summary(result: AdoptResult, skip_hooks: bool) -> None:
         click.echo("      Run `git init` and `workshop adopt --force` to install hooks later,")
         click.echo("      or copy hooks manually from the joinery repo's hooks/ directory.")
 
+    if result.dry_run:
+        click.echo("")
+        click.echo("Dry run complete — re-run without --dry-run to apply.")
+
     click.echo("")
     click.echo("Adoption complete. Next:")
     click.echo("  git status                # review the new files")
     click.echo("  git add -A && git commit -m 'joinery: adopt framework'")
     click.echo("  workshop doctor           # verify the install")
+
+
+@main.command("rollback")
+@click.option(
+    "--path",
+    type=click.Path(exists=True, file_okay=False),
+    help="Project to roll back. Default: current working directory.",
+)
+@click.option(
+    "--keep-files",
+    is_flag=True,
+    default=False,
+    help="Restore hooks but leave written files in place.",
+)
+@click.option(
+    "--yes", "skip_confirm", is_flag=True, default=False, help="Skip confirmation prompt."
+)
+def rollback_command(path: str | None, keep_files: bool, skip_confirm: bool) -> None:
+    """Undo the most recent Joinery transaction.
+
+    Reads the most recent record under `.joinery/transactions/`, deletes every
+    file it wrote (unless --keep-files), restores any hooks from the recorded
+    backup, and removes the transaction record. Only the most recent operation
+    is undone — older state is git's job.
+    """
+    target = Path(path).resolve() if path else Path.cwd()
+
+    if not skip_confirm:
+        if not click.confirm(
+            f"Roll back the most recent Joinery transaction in {target}/?",
+            default=False,
+        ):
+            click.echo("Aborted.")
+            return
+
+    try:
+        result = rollback(target, keep_files=keep_files)
+    except NoTransactionError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    _print_rollback_summary(result, keep_files=keep_files)
+
+
+def _print_rollback_summary(result: RollbackResult, keep_files: bool) -> None:
+    """Print human-readable summary of a rollback() call."""
+    txn = result.transaction
+    if txn is None:
+        # rollback() never returns with txn=None — it raises NoTransactionError first.
+        return
+    click.echo("")
+    click.echo(f"Rolled back: {txn.mode} (tier={txn.tier}, {txn.timestamp})")
+
+    if keep_files:
+        click.echo("  --keep-files: written files left in place.")
+    elif result.deleted_files:
+        click.echo("")
+        click.echo(f"Deleted {len(result.deleted_files)} file(s):")
+        for rel in result.deleted_files[:20]:
+            click.echo(f"  - {rel}")
+        if len(result.deleted_files) > 20:
+            click.echo(f"  ... and {len(result.deleted_files) - 20} more")
+
+    if result.missing_files:
+        click.echo("")
+        click.echo(f"{len(result.missing_files)} file(s) already missing (skipped):")
+        for rel in result.missing_files[:10]:
+            click.echo(f"  ? {rel}")
+
+    if result.restored_hooks:
+        click.echo("")
+        click.echo(f"Restored {len(result.restored_hooks)} hook(s) from backup:")
+        for name in result.restored_hooks:
+            click.echo(f"  > {name}")
+
+    if result.transaction_path is not None:
+        click.echo("")
+        click.echo(f"Transaction record removed: {result.transaction_path.name}")
 
 
 @main.group("session")

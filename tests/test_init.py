@@ -119,3 +119,26 @@ def test_scaffold_writes_managed_by_marker_in_claude(tmp_path: Path) -> None:
     scaffold(target=target, project_name="p", tier="standard", language="python", init_git=False)
     claude_text = (target / "CLAUDE.md").read_text(encoding="utf-8")
     assert "<!-- managed-by: joinery@" in claude_text
+
+
+def test_scaffold_dry_run_does_not_touch_filesystem(tmp_path: Path) -> None:
+    target = tmp_path / "p"
+    written = scaffold(
+        target=target,
+        project_name="p",
+        tier="production",
+        language="python",
+        init_git=False,
+        dry_run=True,
+    )
+    assert not target.exists()
+    # But the return value reports what would have been written.
+    assert any(p == Path("CLAUDE.md") for p in written)
+
+
+def test_scaffold_real_run_writes_transaction_log(tmp_path: Path) -> None:
+    target = tmp_path / "p"
+    scaffold(target=target, project_name="p", tier="standard", language="python", init_git=False)
+    txn_dir = target / ".joinery" / "transactions"
+    assert txn_dir.is_dir()
+    assert len(list(txn_dir.glob("*.json"))) == 1

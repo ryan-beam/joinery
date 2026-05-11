@@ -51,7 +51,9 @@ Before writing anything, `adopt` runs a **safety scan**: refuses on a dirty work
 
 Both `init` and `adopt` write a `.workshop/answers.toml` file recording what Joinery installed (version, tier, language, managed files, preserved files, hooks). That answer file is the foundation for future `workshop diff` / `workshop update` flows — it's how Joinery remembers what it manages in your repo.
 
-Run `workshop --help` to see all subcommands (`init`, `adopt`, `session`, `promote`, `doctor`).
+Add `--dry-run` to either `init` or `adopt` to preview the operation without writing anything. Every real run records a transaction at `.joinery/transactions/<timestamp>.json`; `workshop rollback` undoes the most recent transaction (deletes the files it wrote, restores any hook backup).
+
+Run `workshop --help` to see all subcommands (`init`, `adopt`, `rollback`, `session`, `promote`, `doctor`).
 
 ## What's in the box
 
