@@ -14,16 +14,52 @@ import pytest
 
 from joinery.adopt import AlreadyAdoptedError, adopt, language_at_adopt
 from joinery.manifest import read_manifest
+from joinery.preadopt import UnsafeAdoptError
 
 
-def _make_existing_project(tmp_path: Path, *, with_git: bool = True) -> Path:
-    """Create a minimal existing project to adopt into."""
+def _make_existing_project(tmp_path: Path, *, with_git: bool = True, clean: bool = True) -> Path:
+    """Create a minimal existing project to adopt into.
+
+    By default the project is initialized with git AND has its initial files
+    committed, so the working tree is clean. Pass `clean=False` to leave
+    files uncommitted (used to test the dirty-tree safety check).
+    """
     target = tmp_path / "existing-app"
     target.mkdir()
     (target / "main.py").write_text("print('hello')\n", encoding="utf-8")
     (target / "README.md").write_text("# existing-app\n\nMy app.\n", encoding="utf-8")
     if with_git:
         subprocess.run(["git", "init", "-b", "main"], cwd=target, check=True, capture_output=True)
+        if clean:
+            subprocess.run(
+                [
+                    "git",
+                    "-c",
+                    "user.email=t@t",
+                    "-c",
+                    "user.name=t",
+                    "add",
+                    "-A",
+                ],
+                cwd=target,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "-c",
+                    "user.email=t@t",
+                    "-c",
+                    "user.name=t",
+                    "commit",
+                    "-m",
+                    "initial",
+                ],
+                cwd=target,
+                check=True,
+                capture_output=True,
+            )
     return target
 
 
@@ -81,8 +117,9 @@ def test_adopt_refuses_reentry_without_force(tmp_path: Path) -> None:
 def test_adopt_force_allows_reentry(tmp_path: Path) -> None:
     target = _make_existing_project(tmp_path)
     adopt(target, tier="production", language="python")
-    # Second adopt with force should succeed without raising
-    result = adopt(target, tier="standard", language="python", force=True)
+    # After first adopt the working tree is dirty (new files); allow_dirty here
+    # is intentional to focus the test on re-entry behavior, not the safety scan.
+    result = adopt(target, tier="standard", language="python", force=True, allow_dirty=True)
     assert (target / ".workshop" / "tier.lock").read_text(encoding="utf-8").strip() == "standard"
     assert len(result.written) > 0
 
@@ -196,6 +233,49 @@ def test_language_at_adopt_rejects_invalid_flag(tmp_path: Path) -> None:
         language_at_adopt(target, "rust")
 
 
+def test_adopt_refuses_dirty_working_tree(tmp_path: Path) -> None:
+    """Pre-adopt scan blocks adoption when there are uncommitted changes."""
+    target = _make_existing_project(tmp_path, clean=False)
+    with pytest.raises(UnsafeAdoptError) as exc_info:
+        adopt(target, tier="production", language="python")
+    assert any("working tree is dirty" in e for e in exc_info.value.report.errors)
+
+
+def test_adopt_allow_dirty_bypasses_safety_check(tmp_path: Path) -> None:
+    target = _make_existing_project(tmp_path, clean=False)
+    result = adopt(target, tier="production", language="python", allow_dirty=True)
+    assert (target / "CLAUDE.md").is_file()
+    assert any("working tree is dirty" in e for e in result.safety_report.errors)
+
+
+def test_adopt_skip_scan_bypasses_everything(tmp_path: Path) -> None:
+    target = _make_existing_project(tmp_path, clean=False)
+    # Drop a sensitive file too — would normally warn, but skip_scan suppresses
+    (target / ".env").write_text("SECRET=x\n", encoding="utf-8")
+    result = adopt(target, tier="standard", language="python", skip_scan=True)
+    assert (target / "CLAUDE.md").is_file()
+    assert result.safety_report.errors == []
+    assert result.safety_report.warnings == []
+
+
+def test_adopt_backs_up_existing_hooks_before_install(tmp_path: Path) -> None:
+    target = _make_existing_project(tmp_path)
+    pre_existing_hook = target / ".git" / "hooks" / "pre-commit"
+    pre_existing_hook.write_text("#!/bin/sh\necho 'user hook'\n", encoding="utf-8")
+    result = adopt(target, tier="production", language="python", allow_dirty=True)
+    assert result.hooks_backup is not None
+    assert (result.hooks_backup / "pre-commit").is_file()
+    # Backed-up copy preserves the original content
+    assert "user hook" in (result.hooks_backup / "pre-commit").read_text(encoding="utf-8")
+
+
+def test_adopt_safety_report_warns_about_env(tmp_path: Path) -> None:
+    target = _make_existing_project(tmp_path)
+    (target / ".env").write_text("API_KEY=x\n", encoding="utf-8")
+    result = adopt(target, tier="standard", language="python", allow_dirty=True)
+    assert any("sensitive paths present" in w for w in result.safety_report.warnings)
+
+
 def test_adopt_writes_answer_file_with_managed_and_preserved(tmp_path: Path) -> None:
     """adopt must record managed AND preserved files in .workshop/answers.toml."""
     target = _make_existing_project(tmp_path)
@@ -218,7 +298,8 @@ def test_adopt_force_reentry_overwrites_answer_file(tmp_path: Path) -> None:
     assert first is not None
     assert first.tier == "production"
 
-    adopt(target, tier="standard", language="python", force=True)
+    # allow_dirty=True because the first adopt leaves untracked files.
+    adopt(target, tier="standard", language="python", force=True, allow_dirty=True)
     second = read_manifest(target)
     assert second is not None
     assert second.tier == "standard"
@@ -238,7 +319,9 @@ def test_adopt_with_existing_workshop_config_preserves_without_force(tmp_path: P
     workshop = target / ".workshop"
     workshop.mkdir()
     (workshop / "config.toml").write_text("# custom user content\n", encoding="utf-8")
-    # No tier.lock yet, so this isn't a full prior adoption
-    result = adopt(target, tier="standard", language="python")
+    # No tier.lock yet, so this isn't a full prior adoption. The new file is
+    # untracked so the working tree is dirty — allow_dirty keeps the focus on
+    # the partial-adoption preservation behavior.
+    result = adopt(target, tier="standard", language="python", allow_dirty=True)
     assert (workshop / "config.toml").read_text(encoding="utf-8") == "# custom user content\n"
     assert Path(".workshop/config.toml") in result.preserved

@@ -50,9 +50,27 @@ New module: `src/joinery/manifest.py` with `Manifest` dataclass + `read_manifest
 
 Files Joinery writes now carry a `<!-- managed-by: joinery@VERSION -->` HTML comment at the top (hidden in rendered markdown). Applied to CLAUDE.md, plan.md, AGENTS.md, HANDOVER.md, README.md, the learning module, and the tier-selection ADR. The marker is informational for v0.1.x; future update flows will use it together with the answer file to distinguish framework-managed files from user-edited ones.
 
+### Added — pre-adopt safety scan + hook backup
+
+`workshop adopt` now runs a safety scan before writing anything. The scan inspects the target for conditions that make adoption risky:
+
+- **Dirty working tree** — refuses adoption (ERROR) so the resulting diff is reviewable. Bypass with `--allow-dirty`.
+- **Sensitive paths** like `.env`, `.env.*`, `*.pem`, `*.key`, `credentials.json`, `.aws/`, `.ssh/`, `secrets/`, `id_rsa`, `id_ed25519` — surfaces them as warnings so the user knows what Joinery's new hooks might encounter.
+- **Alternative hook managers** like husky, lefthook, the pre-commit framework — warns that Joinery's hooks may chain awkwardly with theirs.
+- **Existing git hooks** — notes that they will be backed up to `.joinery/backup/hooks-<timestamp>/` before Joinery installs its own.
+
+The scan is run in addition to existing checks (empty target, already-adopted). Errors halt adoption unless overridden; warnings/info are surfaced in the summary but do not block. New CLI flags:
+
+- `--allow-dirty` — bypass the dirty-tree check
+- `--no-scan` — skip the entire scan (escape hatch for CI / recovery)
+
+Hook backup is always non-destructive. Existing non-`.sample` files in `.git/hooks/` are copied to `.joinery/backup/hooks-YYYYMMDDTHHMMSSZ/` before Joinery installs its own. The backup path is returned in `AdoptResult.hooks_backup` and printed in the adoption summary.
+
+New module `src/joinery/preadopt.py` with `PreAdoptReport` dataclass, `UnsafeAdoptError`, `scan()`, and `backup_hooks()`. 16 new unit tests in `tests/test_preadopt.py`; 5 new integration tests in `tests/test_adopt.py` covering dirty-tree refusal, `--allow-dirty` bypass, `--no-scan` bypass, hook backup, and sensitive-path warnings.
+
 ### Tests
 
-18 new tests in `tests/test_adopt.py` (adopt), 8 in `tests/test_manifest.py` (round-trip + edge cases), and 3 additions each to `test_init.py` and `test_adopt.py` covering answer-file content and marker presence. Full suite now 74 passing (was 42 at v0.1.0).
+18 new tests in `tests/test_adopt.py` (adopt), 8 in `tests/test_manifest.py` (round-trip + edge cases), 16 in `tests/test_preadopt.py` (safety scan + backup), and 3 additions each to `test_init.py` and `test_adopt.py` covering answer-file content and marker presence. Full suite now 96 passing (was 42 at v0.1.0).
 
 ## [0.1.0] — 2026-05-10
 
