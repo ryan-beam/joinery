@@ -36,7 +36,18 @@ workshop session start
 
 `workshop init` scaffolds a complete project: `CLAUDE.md` with the 5-rule starter, a Mermaid-ready `plan.md`, the learning module (`learning/`), git hooks for lint/types/tests, and an opinionated `framework.config.toml` tuned to your tier. `workshop session start` runs preflight, surfaces open side quests, and orients you for the work session.
 
-Run `workshop --help` to see all subcommands (`init`, `session`, `promote`, `doctor`).
+### Adopting Joinery into an existing project
+
+```bash
+cd my-existing-project
+workshop adopt --tier production --lang python
+git status                # review the new files
+git add -A && git commit -m 'joinery: adopt framework'
+```
+
+`workshop adopt` overlays the framework onto a codebase that already exists. It is **non-destructive** by default — any file already present (your `README.md`, your `CLAUDE.md`, etc.) is preserved and reported; only missing files are written. Pass `--force` to overwrite. Adopt does not auto-commit; you stage and review the changes through your normal git flow.
+
+Run `workshop --help` to see all subcommands (`init`, `adopt`, `session`, `promote`, `doctor`).
 
 ## What's in the box
 

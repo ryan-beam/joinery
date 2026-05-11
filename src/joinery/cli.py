@@ -2,6 +2,7 @@
 
 Subcommands:
     workshop init <name> [--tier T] [--lang L] [--git/--no-git]
+    workshop adopt [--tier T] [--lang L] [--path P] [--force] [--no-hooks]
     workshop session start
     workshop session end
     workshop promote <project> --to <tier>
@@ -15,6 +16,7 @@ from pathlib import Path
 import click
 
 from joinery import __version__
+from joinery.adopt import AdoptResult, AlreadyAdoptedError, adopt, language_at_adopt
 from joinery.doctor import run_doctor
 from joinery.init import scaffold
 from joinery.promote import promote_project
@@ -103,6 +105,124 @@ def init_command(
     click.echo("  /plan                           # draft your first plan with the agent")
     click.echo("")
     click.echo("Read CLAUDE.md and plan.md before your first session.")
+
+
+@main.command("adopt")
+@click.option(
+    "--tier",
+    type=click.Choice(["production", "standard", "sketch"], case_sensitive=False),
+    help="Tier to adopt at. Prompted if omitted.",
+)
+@click.option(
+    "--lang",
+    type=click.Choice(["python", "typescript", "polyglot"], case_sensitive=False),
+    help="Primary language hint. Auto-detected from target if omitted.",
+)
+@click.option(
+    "--path",
+    type=click.Path(exists=True, file_okay=False),
+    help="Target directory to adopt. Default: current working directory.",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Overwrite existing framework files. Destructive — review the diff before committing.",
+)
+@click.option(
+    "--no-hooks",
+    "skip_hooks",
+    is_flag=True,
+    default=False,
+    help="Skip installing git hooks (useful when adopting in CI or non-git contexts).",
+)
+def adopt_command(
+    tier: str | None,
+    lang: str | None,
+    path: str | None,
+    force: bool,
+    skip_hooks: bool,
+) -> None:
+    """Overlay Joinery onto an existing codebase.
+
+    Run from inside the target directory, or pass --path. Adopt does not
+    overwrite existing files by default; pass --force if you want to replace
+    them. Adopt does not auto-commit — stage and review the changes yourself.
+
+    \b
+    Examples:
+        cd my-existing-project
+        workshop adopt --tier production --lang python
+        workshop adopt --path ../other-repo --tier standard
+    """
+    target = Path(path).resolve() if path else Path.cwd()
+
+    if tier is None:
+        tier = click.prompt(
+            "Choose tier",
+            type=click.Choice(["production", "standard", "sketch"], case_sensitive=False),
+            default="standard",
+            show_default=True,
+        )
+
+    try:
+        language = language_at_adopt(target, lang)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo(f"Adopting Joinery into {target}/ (tier={tier}, lang={language})")
+    if force:
+        click.echo("  --force: existing framework files will be overwritten.")
+
+    try:
+        result = adopt(
+            target=target,
+            tier=tier,
+            language=language,
+            force=force,
+            install_hooks=not skip_hooks,
+        )
+    except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    except AlreadyAdoptedError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    _print_adopt_summary(result, skip_hooks=skip_hooks)
+
+
+def _print_adopt_summary(result: AdoptResult, skip_hooks: bool) -> None:
+    """Print human-readable summary of an adopt() call."""
+    all_written = list(result.written) + list(result.hooks_written)
+    all_preserved = list(result.preserved) + list(result.hooks_preserved)
+
+    if all_written:
+        click.echo("")
+        click.echo(f"Wrote {len(all_written)} file(s):")
+        for rel in all_written[:20]:
+            click.echo(f"  + {rel}")
+        if len(all_written) > 20:
+            click.echo(f"  ... and {len(all_written) - 20} more")
+
+    if all_preserved:
+        click.echo("")
+        click.echo(f"Preserved {len(all_preserved)} existing file(s):")
+        for rel in all_preserved[:10]:
+            click.echo(f"  = {rel}")
+        if len(all_preserved) > 10:
+            click.echo(f"  ... and {len(all_preserved) - 10} more")
+        click.echo("  (pass --force to overwrite)")
+
+    if not result.is_git_repo and not skip_hooks:
+        click.echo("")
+        click.echo("Note: target is not a git repository. Hooks were not installed.")
+        click.echo("      Run `git init` and `workshop adopt --force` to install hooks later,")
+        click.echo("      or copy hooks manually from the joinery repo's hooks/ directory.")
+
+    click.echo("")
+    click.echo("Adoption complete. Next:")
+    click.echo("  git status                # review the new files")
+    click.echo("  git add -A && git commit -m 'joinery: adopt framework'")
+    click.echo("  workshop doctor           # verify the install")
 
 
 @main.group("session")
