@@ -19,6 +19,7 @@ from joinery import __version__
 from joinery.adopt import AdoptResult, AlreadyAdoptedError, adopt, language_at_adopt
 from joinery.doctor import run_doctor
 from joinery.init import scaffold
+from joinery.preadopt import UnsafeAdoptError
 from joinery.promote import promote_project
 from joinery.session import session_end, session_start
 
@@ -136,12 +137,27 @@ def init_command(
     default=False,
     help="Skip installing git hooks (useful when adopting in CI or non-git contexts).",
 )
+@click.option(
+    "--allow-dirty",
+    is_flag=True,
+    default=False,
+    help="Proceed even if the working tree has uncommitted changes (review the diff carefully).",
+)
+@click.option(
+    "--no-scan",
+    "skip_scan",
+    is_flag=True,
+    default=False,
+    help="Skip the pre-adopt safety scan entirely. Not recommended for normal use.",
+)
 def adopt_command(
     tier: str | None,
     lang: str | None,
     path: str | None,
     force: bool,
     skip_hooks: bool,
+    allow_dirty: bool,
+    skip_scan: bool,
 ) -> None:
     """Overlay Joinery onto an existing codebase.
 
@@ -181,11 +197,25 @@ def adopt_command(
             language=language,
             force=force,
             install_hooks=not skip_hooks,
+            allow_dirty=allow_dirty,
+            skip_scan=skip_scan,
         )
     except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
     except AlreadyAdoptedError as exc:
         raise click.ClickException(str(exc)) from exc
+    except UnsafeAdoptError as exc:
+        click.echo("")
+        click.echo("Pre-adopt safety scan failed:", err=True)
+        for err in exc.report.errors:
+            click.echo(f"  ERROR: {err}", err=True)
+        for warning in exc.report.warnings:
+            click.echo(f"  warning: {warning}", err=True)
+        click.echo("")
+        click.echo("Override flags:", err=True)
+        click.echo("  --allow-dirty   bypass the dirty-tree check", err=True)
+        click.echo("  --no-scan       skip the entire scan (not recommended)", err=True)
+        raise click.ClickException("Adoption halted by safety scan.") from exc
 
     _print_adopt_summary(result, skip_hooks=skip_hooks)
 
@@ -194,6 +224,18 @@ def _print_adopt_summary(result: AdoptResult, skip_hooks: bool) -> None:
     """Print human-readable summary of an adopt() call."""
     all_written = list(result.written) + list(result.hooks_written)
     all_preserved = list(result.preserved) + list(result.hooks_preserved)
+
+    if result.safety_report.warnings or result.safety_report.info:
+        click.echo("")
+        click.echo("Safety scan:")
+        for warning in result.safety_report.warnings:
+            click.echo(f"  warning: {warning}")
+        for note in result.safety_report.info:
+            click.echo(f"  note: {note}")
+
+    if result.hooks_backup is not None:
+        click.echo("")
+        click.echo(f"Backed up existing hooks to: {result.hooks_backup}")
 
     if all_written:
         click.echo("")

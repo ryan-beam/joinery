@@ -47,6 +47,8 @@ git add -A && git commit -m 'joinery: adopt framework'
 
 `workshop adopt` overlays the framework onto a codebase that already exists. It is **non-destructive** by default — any file already present (your `README.md`, your `CLAUDE.md`, etc.) is preserved and reported; only missing files are written. Pass `--force` to overwrite. Adopt does not auto-commit; you stage and review the changes through your normal git flow.
 
+Before writing anything, `adopt` runs a **safety scan**: refuses on a dirty working tree (override with `--allow-dirty`), warns about sensitive paths like `.env` or `*.pem`, warns when other hook managers (husky, lefthook, pre-commit framework) are present, and backs up any existing git hooks to `.joinery/backup/hooks-<timestamp>/` before installing its own. Pass `--no-scan` to disable.
+
 Both `init` and `adopt` write a `.workshop/answers.toml` file recording what Joinery installed (version, tier, language, managed files, preserved files, hooks). That answer file is the foundation for future `workshop diff` / `workshop update` flows — it's how Joinery remembers what it manages in your repo.
 
 Run `workshop --help` to see all subcommands (`init`, `adopt`, `session`, `promote`, `doctor`).

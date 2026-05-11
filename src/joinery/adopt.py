@@ -27,6 +27,7 @@ from joinery.init import (
 )
 from joinery.lang import Language, detect_language
 from joinery.manifest import Manifest, write_manifest
+from joinery.preadopt import PreAdoptReport, UnsafeAdoptError, backup_hooks, scan
 from joinery.templates import render_context
 
 
@@ -40,6 +41,8 @@ class AdoptResult:
     hooks_preserved: list[Path] = field(default_factory=list)
     is_git_repo: bool = True
     hooks_skipped: bool = False
+    safety_report: PreAdoptReport = field(default_factory=PreAdoptReport)
+    hooks_backup: Path | None = None
 
 
 class AlreadyAdoptedError(RuntimeError):
@@ -53,6 +56,8 @@ def adopt(
     language: str,
     force: bool = False,
     install_hooks: bool = True,
+    allow_dirty: bool = False,
+    skip_scan: bool = False,
 ) -> AdoptResult:
     """Overlay Joinery onto an existing codebase at `target`.
 
@@ -62,16 +67,25 @@ def adopt(
         language: One of "python", "typescript", "polyglot".
         force: If True, overwrite existing files. Default: preserve them.
         install_hooks: If True (default) and target is a git repo, install
-            framework hooks. Existing hooks are preserved unless force=True.
+            framework hooks. Existing hooks are backed up and preserved
+            unless force=True.
+        allow_dirty: If True, skip the dirty-tree check from the pre-adopt
+            scan. Default: refuse adoption on a dirty working tree so the
+            resulting diff is reviewable.
+        skip_scan: If True, skip the pre-adopt safety scan entirely. Useful
+            for CI and recovery scenarios; not recommended for normal use.
 
     Returns:
-        AdoptResult summarizing what was written, preserved, and skipped.
+        AdoptResult summarizing what was written, preserved, and skipped,
+        plus the pre-adopt safety report and the hook backup path (if any).
 
     Raises:
         FileNotFoundError: target does not exist.
         ValueError: target exists but is empty (use `init` instead).
         AlreadyAdoptedError: target already has .workshop/tier.lock and
             force is False.
+        UnsafeAdoptError: pre-adopt scan found blocking issues and no
+            override flag was passed.
     """
     if not target.exists():
         raise FileNotFoundError(f"Directory `{target}` does not exist.")
@@ -93,10 +107,16 @@ def adopt(
     is_git_repo = (target / ".git").is_dir()
     skip_existing = not force
 
+    report = PreAdoptReport()
+    if not skip_scan:
+        report = scan(target, install_hooks=install_hooks)
+        if report.has_errors and not _all_errors_overridden(report, allow_dirty=allow_dirty):
+            raise UnsafeAdoptError(report)
+
     project_name = target.resolve().name
     ctx = render_context(project_name=project_name, tier=tier, language=language)
 
-    result = AdoptResult(is_git_repo=is_git_repo)
+    result = AdoptResult(is_git_repo=is_git_repo, safety_report=report)
 
     for writer in (
         write_project_files,
@@ -117,6 +137,7 @@ def adopt(
 
     if install_hooks:
         if is_git_repo:
+            result.hooks_backup = backup_hooks(target)
             hw, hp = install_hooks_into(target, skip_existing=skip_existing)
             result.hooks_written = hw
             result.hooks_preserved = hp
@@ -137,6 +158,21 @@ def adopt(
     result.written.append(manifest_path.relative_to(target))
 
     return result
+
+
+def _all_errors_overridden(report: PreAdoptReport, *, allow_dirty: bool) -> bool:
+    """Return True iff every error in the report has a matching override flag set.
+
+    Currently the only blocking error is the dirty-tree check, overridden by
+    `allow_dirty`. As new error types are added, this function expands.
+    """
+    for err in report.errors:
+        if "working tree is dirty" in err:
+            if not allow_dirty:
+                return False
+        else:
+            return False  # unknown error type — never auto-override
+    return True
 
 
 def language_at_adopt(target: Path, lang_flag: str | None) -> Language:
