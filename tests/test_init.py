@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from joinery.init import scaffold
+from joinery.manifest import read_manifest
 
 
 @pytest.mark.parametrize("tier", ["production", "standard", "sketch"])
@@ -86,3 +87,35 @@ def test_scaffold_path_with_spaces(tmp_path: Path) -> None:
         init_git=False,
     )
     assert (target / "CLAUDE.md").is_file()
+
+
+def test_scaffold_writes_answer_file(tmp_path: Path) -> None:
+    """init must write .workshop/answers.toml recording managed state."""
+    target = tmp_path / "p"
+    scaffold(target=target, project_name="p", tier="production", language="python", init_git=False)
+    manifest = read_manifest(target)
+    assert manifest is not None
+    assert manifest.mode == "init"
+    assert manifest.tier == "production"
+    assert manifest.language == "python"
+    assert manifest.project_name == "p"
+    assert "CLAUDE.md" in manifest.managed_files
+    assert "plan.md" in manifest.managed_files
+    assert manifest.preserved_files == []  # nothing preserved on greenfield init
+
+
+def test_scaffold_with_git_records_hooks_in_manifest(tmp_path: Path) -> None:
+    target = tmp_path / "p"
+    scaffold(target=target, project_name="p", tier="standard", language="python", init_git=True)
+    manifest = read_manifest(target)
+    assert manifest is not None
+    assert "pre-commit" in manifest.hooks_installed
+    assert "pre-push" in manifest.hooks_installed
+
+
+def test_scaffold_writes_managed_by_marker_in_claude(tmp_path: Path) -> None:
+    """CLAUDE.md should carry the managed-by sentinel for future update detection."""
+    target = tmp_path / "p"
+    scaffold(target=target, project_name="p", tier="standard", language="python", init_git=False)
+    claude_text = (target / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "<!-- managed-by: joinery@" in claude_text

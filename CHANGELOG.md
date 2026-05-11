@@ -21,9 +21,38 @@ Mid-project adoption command for installing the framework into an existing codeb
 
 `scaffold()` now composes six module-level helpers (`write_project_files`, `write_learning_module`, `write_tier_adr`, `write_workshop_state`, `install_skills`, `install_hooks_into`) instead of inlining the file-laying logic. The same helpers back `adopt()` with `skip_existing=True`. Public API unchanged — `scaffold()` signature and return type are identical. `copy_template` and `copy_tree` in `templates.py` gain an optional `skip_existing=False` keyword for the same purpose.
 
+### Added — answer file `.workshop/answers.toml`
+
+Every `workshop init` and `workshop adopt` now writes a tracked answer file recording what Joinery installed in the project. This is the foundation for future `workshop diff` / `workshop update` / `workshop migrate` flows — without it, Joinery has no durable memory of which files in your repo it manages.
+
+The file is plain TOML:
+
+```toml
+joinery_version = "0.1.x"
+mode = "adopt"          # or "init"
+tier = "production"
+language = "python"
+project_name = "my-app"
+created_at = "2026-05-11T..."
+
+[files]
+managed = ["CLAUDE.md", "plan.md", ...]
+preserved = ["README.md", ...]  # adopt only — files Joinery skipped
+
+[hooks]
+installed = ["pre-commit", "pre-push", ...]
+preserved = []
+```
+
+New module: `src/joinery/manifest.py` with `Manifest` dataclass + `read_manifest()` / `write_manifest()`. Hand-written TOML serializer (the schema is small and fixed) — no new dependencies. Stdlib `tomllib` for reads (Python 3.11+).
+
+### Added — `managed-by` markers in rendered templates
+
+Files Joinery writes now carry a `<!-- managed-by: joinery@VERSION -->` HTML comment at the top (hidden in rendered markdown). Applied to CLAUDE.md, plan.md, AGENTS.md, HANDOVER.md, README.md, the learning module, and the tier-selection ADR. The marker is informational for v0.1.x; future update flows will use it together with the answer file to distinguish framework-managed files from user-edited ones.
+
 ### Tests
 
-18 new tests in `tests/test_adopt.py`. Full suite now 60 passing (was 42).
+18 new tests in `tests/test_adopt.py` (adopt), 8 in `tests/test_manifest.py` (round-trip + edge cases), and 3 additions each to `test_init.py` and `test_adopt.py` covering answer-file content and marker presence. Full suite now 74 passing (was 42 at v0.1.0).
 
 ## [0.1.0] — 2026-05-10
 

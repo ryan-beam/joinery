@@ -17,6 +17,7 @@ from typing import Any
 
 from joinery import git
 from joinery.lang import Language, detect_language
+from joinery.manifest import Manifest, write_manifest
 from joinery.paths import hooks_dir, skills_dir, templates_dir
 from joinery.templates import (
     copy_static,
@@ -204,9 +205,25 @@ def scaffold(
     written += write_workshop_state(target, tier, ctx)[0]
     written += install_skills(target)[0]
 
+    hook_names_installed: list[str] = []
     if init_git:
         git.init_repo(target)
-        written += install_hooks_into(target)[0]
+        hook_paths = install_hooks_into(target)[0]
+        hook_names_installed = [p.name for p in hook_paths]
+        written += hook_paths
+
+    manifest = Manifest(
+        project_name=project_name,
+        tier=tier,
+        language=language,
+        mode="init",
+        managed_files=[str(p) for p in written],
+        hooks_installed=hook_names_installed,
+    )
+    manifest_path = write_manifest(target, manifest)
+    written.append(manifest_path.relative_to(target))
+
+    if init_git:
         git.add_all(target)
         commit_msg = f"joinery: bench setup, tier={tier}"
         git.commit(target, commit_msg)

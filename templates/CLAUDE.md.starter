@@ -1,3 +1,5 @@
+<!-- managed-by: joinery@{{joinery_version}} -->
+
 # CLAUDE.md
 
 > Five starter rules for {{project_name}}. Each is meant to be refined or replaced by `/rule` commits as real failures surface. Don't add rules from theory.
