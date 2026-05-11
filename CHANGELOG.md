@@ -6,7 +6,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
-Nothing yet.
+### Added — `workshop adopt`
+
+Mid-project adoption command for installing the framework into an existing codebase. Where `init` requires an empty target and scaffolds a fresh project, `adopt` overlays Joinery onto whatever is already there:
+
+- `workshop adopt [--tier T] [--lang L] [--path P] [--force] [--no-hooks]` — runs in the current directory by default
+- **Non-destructive by default.** Existing files (`README.md`, prior `CLAUDE.md`, etc.) are preserved and reported, not overwritten. `--force` opts into overwriting framework files.
+- **Refuses re-adoption.** If `.workshop/tier.lock` already exists, the command exits with a clear error message unless `--force` is passed.
+- **Does not auto-commit.** Files are written to the working tree; the user reviews the diff and stages them through their normal git workflow.
+- **Handles non-git targets.** Adopts framework files but skips hook installation, with a printed note explaining how to install hooks after `git init`.
+- Project name is derived from the target directory's name; language auto-detected from existing files (Python / TypeScript / polyglot) with a fallback to `polyglot` when nothing matches.
+
+### Changed — `init.py` refactor (internal)
+
+`scaffold()` now composes six module-level helpers (`write_project_files`, `write_learning_module`, `write_tier_adr`, `write_workshop_state`, `install_skills`, `install_hooks_into`) instead of inlining the file-laying logic. The same helpers back `adopt()` with `skip_existing=True`. Public API unchanged — `scaffold()` signature and return type are identical. `copy_template` and `copy_tree` in `templates.py` gain an optional `skip_existing=False` keyword for the same purpose.
+
+### Tests
+
+18 new tests in `tests/test_adopt.py`. Full suite now 60 passing (was 42).
 
 ## [0.1.0] — 2026-05-10
 

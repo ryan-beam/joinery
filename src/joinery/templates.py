@@ -46,20 +46,37 @@ def _render_text(content: str, ctx: dict[str, Any]) -> str:
     return template.render(**ctx)
 
 
-def copy_template(source: Path, target: Path, ctx: dict[str, Any]) -> None:
-    """Copy a single template file from source to target, rendering placeholders."""
+def copy_template(
+    source: Path, target: Path, ctx: dict[str, Any], *, skip_existing: bool = False
+) -> bool:
+    """Copy a single template file from source to target, rendering placeholders.
+
+    Returns True if the file was written, False if it was preserved (only possible
+    when skip_existing=True and target already exists).
+    """
+    if skip_existing and target.exists():
+        return False
     target.parent.mkdir(parents=True, exist_ok=True)
     content = source.read_text(encoding="utf-8")
     rendered = _render_text(content, ctx)
     target.write_text(rendered, encoding="utf-8")
+    return True
 
 
-def copy_tree(source_dir: Path, target_dir: Path, ctx: dict[str, Any]) -> list[Path]:
+def copy_tree(
+    source_dir: Path,
+    target_dir: Path,
+    ctx: dict[str, Any],
+    *,
+    skip_existing: bool = False,
+) -> tuple[list[Path], list[Path]]:
     """Recursively copy a template tree into target_dir, rendering each file.
 
-    Returns the list of files written (relative to target_dir).
+    Returns (written, preserved): both lists hold paths relative to target_dir.
+    The preserved list is always empty when skip_existing=False.
     """
     written: list[Path] = []
+    preserved: list[Path] = []
     for source_file in sorted(source_dir.rglob("*")):
         if not source_file.is_file():
             continue
@@ -68,9 +85,12 @@ def copy_tree(source_dir: Path, target_dir: Path, ctx: dict[str, Any]) -> list[P
         # Example: CLAUDE.md.starter -> CLAUDE.md; plan.md.template -> plan.md
         target_name = _strip_template_suffix(relative.name)
         target_file = target_dir / relative.with_name(target_name)
-        copy_template(source_file, target_file, ctx)
-        written.append(target_file.relative_to(target_dir))
-    return written
+        rel_out = target_file.relative_to(target_dir)
+        if copy_template(source_file, target_file, ctx, skip_existing=skip_existing):
+            written.append(rel_out)
+        else:
+            preserved.append(rel_out)
+    return written, preserved
 
 
 def _strip_template_suffix(filename: str) -> str:
