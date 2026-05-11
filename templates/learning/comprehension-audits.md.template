@@ -1,3 +1,5 @@
+<!-- managed-by: joinery@{{joinery_version}} -->
+
 # Comprehension audits for {{project_name}}
 
 The cold-explanation ritual. Pick a recent commit, explain the flow without looking at the code, score honestly, file gaps as new side quests.

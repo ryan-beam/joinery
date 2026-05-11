@@ -26,6 +26,7 @@ from joinery.init import (
     write_workshop_state,
 )
 from joinery.lang import Language, detect_language
+from joinery.manifest import Manifest, write_manifest
 from joinery.templates import render_context
 
 
@@ -121,6 +122,19 @@ def adopt(
             result.hooks_preserved = hp
         else:
             result.hooks_skipped = True
+
+    manifest = Manifest(
+        project_name=project_name,
+        tier=tier,
+        language=language,
+        mode="adopt",
+        managed_files=[str(p) for p in result.written],
+        preserved_files=[str(p) for p in result.preserved],
+        hooks_installed=[p.name for p in result.hooks_written],
+        hooks_preserved=[p.name for p in result.hooks_preserved],
+    )
+    manifest_path = write_manifest(target, manifest)
+    result.written.append(manifest_path.relative_to(target))
 
     return result
 

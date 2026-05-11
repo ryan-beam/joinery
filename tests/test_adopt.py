@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from joinery.adopt import AlreadyAdoptedError, adopt, language_at_adopt
+from joinery.manifest import read_manifest
 
 
 def _make_existing_project(tmp_path: Path, *, with_git: bool = True) -> Path:
@@ -193,6 +194,42 @@ def test_language_at_adopt_rejects_invalid_flag(tmp_path: Path) -> None:
     target = _make_existing_project(tmp_path)
     with pytest.raises(ValueError, match="Invalid language"):
         language_at_adopt(target, "rust")
+
+
+def test_adopt_writes_answer_file_with_managed_and_preserved(tmp_path: Path) -> None:
+    """adopt must record managed AND preserved files in .workshop/answers.toml."""
+    target = _make_existing_project(tmp_path)
+    adopt(target, tier="production", language="python")
+    manifest = read_manifest(target)
+    assert manifest is not None
+    assert manifest.mode == "adopt"
+    assert manifest.tier == "production"
+    assert manifest.project_name == "existing-app"
+    # README.md is preserved (existed in fixture); CLAUDE.md is written
+    assert "CLAUDE.md" in manifest.managed_files
+    assert "README.md" in manifest.preserved_files
+
+
+def test_adopt_force_reentry_overwrites_answer_file(tmp_path: Path) -> None:
+    """A --force re-adopt should produce a fresh manifest reflecting new tier."""
+    target = _make_existing_project(tmp_path)
+    adopt(target, tier="production", language="python")
+    first = read_manifest(target)
+    assert first is not None
+    assert first.tier == "production"
+
+    adopt(target, tier="standard", language="python", force=True)
+    second = read_manifest(target)
+    assert second is not None
+    assert second.tier == "standard"
+
+
+def test_adopt_writes_managed_by_marker(tmp_path: Path) -> None:
+    """Files written during adopt should carry the managed-by sentinel."""
+    target = _make_existing_project(tmp_path)
+    adopt(target, tier="standard", language="python")
+    claude_text = (target / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "<!-- managed-by: joinery@" in claude_text
 
 
 def test_adopt_with_existing_workshop_config_preserves_without_force(tmp_path: Path) -> None:
