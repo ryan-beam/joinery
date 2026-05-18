@@ -132,6 +132,17 @@ def select_config_template(tier: str) -> Path:
     return path
 
 
+def select_gitignore_template(language: str) -> Path:
+    """Return the path to the language-appropriate .gitignore template."""
+    name = f".gitignore.{language}"
+    path = templates_dir() / "gitignore" / name
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Gitignore template not found for language {language!r}: {path}"
+        )
+    return path
+
+
 def copy_static(source: Path, target: Path, *, dry_run: bool = False) -> None:
     """Copy a file without template rendering. No-op when dry_run=True."""
     if dry_run:

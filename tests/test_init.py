@@ -142,3 +142,44 @@ def test_scaffold_real_run_writes_transaction_log(tmp_path: Path) -> None:
     txn_dir = target / ".joinery" / "transactions"
     assert txn_dir.is_dir()
     assert len(list(txn_dir.glob("*.json"))) == 1
+
+
+@pytest.mark.parametrize("language", ["python", "typescript", "polyglot"])
+def test_scaffold_writes_gitignore(tmp_path: Path, language: str) -> None:
+    """Every init must scaffold a .gitignore appropriate for the language."""
+    target = tmp_path / "p"
+    scaffold(
+        target=target, project_name="p", tier="production", language=language, init_git=False
+    )
+    gi = target / ".gitignore"
+    assert gi.is_file(), f"missing .gitignore for language={language}"
+    text = gi.read_text(encoding="utf-8")
+    # Common entries every language scaffold must include.
+    assert ".joinery/" in text, ".gitignore must hide .joinery/ audit state"
+    assert ".workshop/usage.jsonl" in text, ".gitignore must hide local usage log"
+    assert ".env" in text, ".gitignore must hide .env secrets"
+
+
+def test_scaffold_gitignore_python_specific(tmp_path: Path) -> None:
+    target = tmp_path / "p"
+    scaffold(target=target, project_name="p", tier="standard", language="python", init_git=False)
+    text = (target / ".gitignore").read_text(encoding="utf-8")
+    assert "__pycache__/" in text
+    assert ".venv/" in text
+
+
+def test_scaffold_gitignore_typescript_specific(tmp_path: Path) -> None:
+    target = tmp_path / "p"
+    scaffold(
+        target=target, project_name="p", tier="standard", language="typescript", init_git=False
+    )
+    text = (target / ".gitignore").read_text(encoding="utf-8")
+    assert "node_modules/" in text
+
+
+def test_scaffold_gitignore_in_manifest(tmp_path: Path) -> None:
+    target = tmp_path / "p"
+    scaffold(target=target, project_name="p", tier="standard", language="python", init_git=False)
+    manifest = read_manifest(target)
+    assert manifest is not None
+    assert ".gitignore" in manifest.managed_files

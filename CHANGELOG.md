@@ -6,6 +6,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added — scaffolded `.gitignore`
+
+`workshop init` and `workshop adopt` now write a language-appropriate `.gitignore` at the project root. Previously neither command scaffolded one, leaving fresh projects with `.joinery/` audit state and `.env` files visible to `git status` and at risk of being committed.
+
+- New templates under `templates/gitignore/`: `.gitignore.python`, `.gitignore.typescript`, `.gitignore.polyglot`. Each includes language-specific build artifacts, virtualenvs/`node_modules/`, tooling caches, editor/OS noise, secrets (`.env`, `*.pem`, `*.key`), and Joinery's own local-only paths (`.joinery/`, `.workshop/usage.jsonl`).
+- New helper `templates.select_gitignore_template(language)` mirroring `select_config_template(tier)`.
+- New helper `init.write_gitignore(target, language, ctx, ...)` used by both `scaffold()` (init) and `adopt()`. Under adopt, `skip_existing=True` preserves any pre-existing `.gitignore` so user customisations are not clobbered.
+- `.gitignore` is recorded in `.workshop/answers.toml` as a managed file (so future `workshop diff` flows can detect drift).
+- 6 new tests: gitignore presence + language-specific contents + manifest tracking + adopt preserves vs writes.
+
 ### Added — `workshop adopt`
 
 Mid-project adoption command for installing the framework into an existing codebase. Where `init` requires an empty target and scaffolds a fresh project, `adopt` overlays Joinery onto whatever is already there:
