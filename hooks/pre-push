@@ -2,9 +2,15 @@
 # Joinery pre-push hook.
 # Last-line-of-defense before code leaves the local machine.
 # - Refuses direct main pushes on production tier (per [git.branching] require_branch)
-# - Reads reviews/ for critical findings, refuses if any are open
+# - Queries roborev for critical/high findings on commits being pushed, refuses if any
 # Tier-aware: reads .workshop/config.toml.
 # See docs/spec.md section 8 + section 13 for design.
+#
+# Review gate: roborev stores reviews in ~/.roborev/reviews.db (SQLite), NOT in
+# reviews/<sha>.md files. We shell out to `roborev show <sha> --json` and parse
+# JSON for unresolved critical/high findings. If roborev or jq is missing, the
+# gate is skipped (graceful degradation — the framework's whole point is to fail
+# safe, not block users without roborev).
 
 set -euo pipefail
 
@@ -25,20 +31,22 @@ print(f'MAIN_BRANCH={c[\"git\"][\"branching\"][\"main_branch\"]}')
 
 [ "${ENABLED:-true}" != "true" ] && exit 0
 
-# Refuse direct main pushes on production tier — but allow the very first
-# bootstrap push that CREATES the main branch on the remote. Subsequent
-# pushes (updates) still go through feature-branch + PR.
+# Capture stdin once — git sends one line per ref being pushed, and both checks
+# below need to iterate it. Using a here-string after capture lets us loop twice.
+STDIN_LINES=$(cat)
+
 ZERO_SHA="0000000000000000000000000000000000000000"
+
+# --- Check 1: refuse direct main pushes on production tier ---
+# Allow the very first bootstrap push that CREATES the main branch on the remote
+# (remote_sha = all zeros). Updates to an existing remote main still get refused.
 if [ "${REQUIRE_BRANCH:-true}" = "true" ]; then
     while read -r local_ref local_sha remote_ref remote_sha; do
-        # Strip trailing CR in case stdin uses CRLF line endings (Windows git).
+        [ -z "$local_ref" ] && continue
         remote_sha="${remote_sha%$'\r'}"
         REMOTE_BRANCH="${remote_ref##*/}"
         CURRENT=$(git branch --show-current)
         if [ "$REMOTE_BRANCH" = "${MAIN_BRANCH:-main}" ] && [ "$CURRENT" = "$REMOTE_BRANCH" ]; then
-            # remote_sha is all zeros when the ref doesn't exist on the
-            # remote yet — i.e. this push is CREATING the branch (bootstrap).
-            # Updates to an existing remote main still get refused.
             if [ "$remote_sha" = "$ZERO_SHA" ]; then
                 continue
             fi
@@ -48,17 +56,62 @@ if [ "${REQUIRE_BRANCH:-true}" = "true" ]; then
             echo "  git push -u origin feat/<short-summary>"
             exit 1
         fi
-    done
+    done <<< "$STDIN_LINES"
 fi
 
-# Read reviews/ for critical findings
-if [ -d reviews ]; then
-    BLOCKED=$(grep -l "^## Critical" reviews/*.md 2>/dev/null || true)
-    if [ -n "$BLOCKED" ]; then
-        echo "pre-push refused: critical adversarial review findings outstanding."
-        echo "Review and address before pushing:"
-        echo "$BLOCKED" | sed 's/^/  /'
-        echo "If a finding is a false positive, document the override in the review file then retry."
+# --- Check 2: roborev review gate ---
+# Shell out to `roborev show <sha> --json` for each commit being pushed and
+# refuse the push if any has unresolved critical/high findings.
+#
+# Graceful degradation: if `roborev` or `jq` isn't installed, skip silently. The
+# user can `workshop setup` to install roborev. Git Bash on Windows includes jq.
+if command -v roborev >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+    BLOCKING_SHAS=""
+    while read -r local_ref local_sha remote_ref remote_sha; do
+        [ -z "$local_ref" ] && continue
+        local_sha="${local_sha%$'\r'}"
+        remote_sha="${remote_sha%$'\r'}"
+        # Determine the range of commits being pushed. If remote_sha is zeros
+        # (creating the ref), check all commits unique to this branch vs main.
+        if [ "$remote_sha" = "$ZERO_SHA" ]; then
+            # Use the configured main branch as the base for new branches.
+            BASE_REF="origin/${MAIN_BRANCH:-main}"
+            git rev-parse "$BASE_REF" >/dev/null 2>&1 || BASE_REF="${MAIN_BRANCH:-main}"
+            RANGE_SPEC="${BASE_REF}..${local_sha}"
+        else
+            RANGE_SPEC="${remote_sha}..${local_sha}"
+        fi
+        SHAS=$(git rev-list "$RANGE_SPEC" 2>/dev/null || true)
+        for sha in $SHAS; do
+            # `roborev show <sha> --json` returns review data; we want to know
+            # whether any finding has severity critical|high AND is not resolved.
+            # If roborev has no review for the sha (not yet reviewed), the daemon
+            # might still be processing — we treat "no review yet" as PASS to
+            # avoid blocking work indefinitely. Users who want stricter behavior
+            # can `roborev wait <sha>` before pushing.
+            REVIEW_JSON=$(roborev show "$sha" --json 2>/dev/null || echo "")
+            [ -z "$REVIEW_JSON" ] && continue
+            HAS_BLOCKING=$(echo "$REVIEW_JSON" | jq -e '
+                [.findings[]?
+                 | select((.severity // .level) == "critical" or (.severity // .level) == "high")
+                 | select((.status // "open") != "resolved" and (.status // "open") != "dismissed" and (.status // "open") != "fixed")
+                ] | length > 0
+            ' 2>/dev/null || echo "false")
+            if [ "$HAS_BLOCKING" = "true" ]; then
+                BLOCKING_SHAS="$BLOCKING_SHAS $sha"
+            fi
+        done
+    done <<< "$STDIN_LINES"
+    if [ -n "$BLOCKING_SHAS" ]; then
+        echo "pre-push refused: roborev found unresolved critical/high findings."
+        echo "Blocking commits:"
+        for sha in $BLOCKING_SHAS; do
+            echo "  $sha"
+            echo "    Inspect with: roborev show $sha"
+        done
+        echo ""
+        echo "Resolve, dismiss, or mark fixed in roborev's TUI, then retry."
+        echo "  roborev tui"
         exit 1
     fi
 fi

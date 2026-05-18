@@ -35,11 +35,39 @@ class SetupResult:
 
     roborev_installed: bool = False
     roborev_already_present: bool = False
+    roborev_init_run: bool = False
+    roborev_init_error: str = ""
     attempts: list[InstallAttempt] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.attempts is None:
             self.attempts = []
+
+
+def run_roborev_init(project_root: Path) -> tuple[bool, str]:
+    """Run `roborev init` inside a project to install its post-commit hook.
+
+    Returns (success, error_text). Idempotent — running twice is safe; roborev's
+    init is a no-op if hooks are already installed.
+    """
+    if not shutil.which("roborev"):
+        return False, "roborev not on PATH"
+    if not (project_root / ".git").is_dir():
+        return False, "not a git repo"
+    try:
+        result = subprocess.run(
+            ["roborev", "init"],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return False, str(exc)
+    if result.returncode == 0:
+        return True, ""
+    return False, (result.stderr or result.stdout or "(no output)")[:500]
 
 
 def run_setup(*, assume_yes: bool = False, project_root: Path | None = None) -> SetupResult:
@@ -74,6 +102,12 @@ def run_setup(*, assume_yes: bool = False, project_root: Path | None = None) -> 
         attempt.error = err
         if ok and shutil.which("roborev"):
             result.roborev_installed = True
+            # If the caller passed a project_root, also run `roborev init` to
+            # install the post-commit hook in that project.
+            if project_root is not None and (project_root / ".git").is_dir():
+                init_ok, init_err = run_roborev_init(project_root)
+                result.roborev_init_run = init_ok
+                result.roborev_init_error = init_err
             return result
 
     return result
@@ -108,32 +142,43 @@ def _build_install_attempts() -> list[InstallAttempt]:
     elif system == "Windows":
         attempts.append(
             InstallAttempt(
-                label="winget (Windows native)",
-                command=["winget", "install", "--id", "roborev.roborev", "-e"],
-                available=shutil.which("winget") is not None,
-            )
-        )
-        attempts.append(
-            InstallAttempt(
-                label="Scoop",
-                command=["scoop", "install", "roborev"],
-                available=shutil.which("scoop") is not None,
+                label="PowerShell install script (Windows native)",
+                command=[
+                    "powershell",
+                    "-ExecutionPolicy",
+                    "ByPass",
+                    "-c",
+                    "irm https://roborev.io/install.ps1 | iex",
+                ],
+                available=shutil.which("powershell") is not None,
             )
         )
 
-    # Universal fallback: curl install script. Works anywhere bash + curl exist
-    # (including Git Bash on Windows). The script URL is what the spec / project
-    # README documents; if it 404s, the attempt fails and the user gets a clear
-    # next-step message.
+    # Universal curl install — works on macOS and Linux. (Windows users get the
+    # PowerShell script above; if they have Git Bash + curl, this can still work
+    # as a secondary attempt.)
     attempts.append(
         InstallAttempt(
-            label="curl install script (universal)",
+            label="curl install script (POSIX shell)",
             command=[
                 "bash",
                 "-c",
                 "curl -fsSL https://roborev.io/install.sh | bash",
             ],
             available=(shutil.which("curl") is not None and shutil.which("bash") is not None),
+        )
+    )
+
+    # Final fallback: `go install` — works for anyone with Go 1.25+ toolchain.
+    attempts.append(
+        InstallAttempt(
+            label="go install (any platform with Go 1.25+)",
+            command=[
+                "go",
+                "install",
+                "github.com/roborev-dev/roborev/cmd/roborev@latest",
+            ],
+            available=shutil.which("go") is not None,
         )
     )
 

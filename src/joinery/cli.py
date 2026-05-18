@@ -574,7 +574,12 @@ def setup_command(yes: bool) -> None:
     click.echo("")
     click.echo("Attempting install (cross-platform, multi-strategy)...")
     click.echo("")
-    result = run_setup(assume_yes=True)
+    # If we're inside a Joinery project (current dir has .git AND .workshop),
+    # also run `roborev init` after a successful install. Otherwise just install
+    # globally and let the user run `roborev init` per-project later.
+    cwd = Path.cwd()
+    project_root = cwd if (cwd / ".git").is_dir() and (cwd / ".workshop").is_dir() else None
+    result = run_setup(assume_yes=True, project_root=project_root)
 
     for attempt in result.attempts:
         if not attempt.available:
@@ -588,10 +593,21 @@ def setup_command(yes: bool) -> None:
     click.echo("")
     if result.roborev_installed:
         click.echo("roborev installed successfully.")
-        click.echo("Next: run `workshop doctor` to verify.")
-        click.echo(
-            "In your projects, roborev's post-commit hook will auto-fire on every commit."
-        )
+        if result.roborev_init_run:
+            click.echo("roborev init: post-commit hook installed in this project.")
+        elif project_root is not None:
+            click.echo(
+                f"roborev init: failed in this project ({result.roborev_init_error}). "
+                "Run `roborev init` manually."
+            )
+        else:
+            click.echo(
+                "Not inside a Joinery project — run `roborev init` from your "
+                "project root to install the post-commit hook there."
+            )
+        click.echo("")
+        click.echo("Next: `workshop doctor` to verify daemon health.")
+        click.echo("From the next commit forward, roborev auto-reviews every commit.")
     else:
         click.echo(format_failure_help(result))
 
