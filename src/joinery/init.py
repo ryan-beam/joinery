@@ -25,6 +25,7 @@ from joinery.templates import (
     copy_tree,
     render_context,
     select_config_template,
+    select_gitignore_template,
 )
 from joinery.transactions import Transaction, write_transaction
 
@@ -92,6 +93,27 @@ def write_tier_adr(
     adr_dest = target / "docs" / "decisions" / "0001-tier-selection.md"
     rel = adr_dest.relative_to(target)
     if copy_template(adr_src, adr_dest, ctx, skip_existing=skip_existing, dry_run=dry_run):
+        return [rel], []
+    return [], [rel]
+
+
+def write_gitignore(
+    target: Path,
+    language: str,
+    ctx: dict[str, Any],
+    *,
+    skip_existing: bool = False,
+    dry_run: bool = False,
+) -> tuple[list[Path], list[Path]]:
+    """Write .gitignore from the language-specific template.
+
+    Always written under `init` (skip_existing=False); under `adopt` the existing
+    .gitignore is preserved so user customisations stick.
+    """
+    src = select_gitignore_template(language)
+    dest = target / ".gitignore"
+    rel = dest.relative_to(target)
+    if copy_template(src, dest, ctx, skip_existing=skip_existing, dry_run=dry_run):
         return [rel], []
     return [], [rel]
 
@@ -219,6 +241,7 @@ def scaffold(
     written += write_project_files(target, ctx, dry_run=dry_run)[0]
     written += write_learning_module(target, ctx, dry_run=dry_run)[0]
     written += write_tier_adr(target, ctx, dry_run=dry_run)[0]
+    written += write_gitignore(target, language, ctx, dry_run=dry_run)[0]
     written += write_workshop_state(target, tier, ctx, dry_run=dry_run)[0]
     written += install_skills(target, dry_run=dry_run)[0]
 

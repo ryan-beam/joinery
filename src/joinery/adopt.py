@@ -20,6 +20,7 @@ from pathlib import Path
 from joinery.init import (
     install_hooks_into,
     install_skills,
+    write_gitignore,
     write_learning_module,
     write_project_files,
     write_tier_adr,
@@ -129,6 +130,10 @@ def adopt(
         w, p = writer(target, ctx, skip_existing=skip_existing, dry_run=dry_run)
         result.written.extend(w)
         result.preserved.extend(p)
+
+    w, p = write_gitignore(target, language, ctx, skip_existing=skip_existing, dry_run=dry_run)
+    result.written.extend(w)
+    result.preserved.extend(p)
 
     w, p = write_workshop_state(target, tier, ctx, skip_existing=skip_existing, dry_run=dry_run)
     result.written.extend(w)

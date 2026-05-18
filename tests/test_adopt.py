@@ -352,3 +352,44 @@ def test_adopt_with_existing_workshop_config_preserves_without_force(tmp_path: P
     result = adopt(target, tier="standard", language="python", allow_dirty=True)
     assert (workshop / "config.toml").read_text(encoding="utf-8") == "# custom user content\n"
     assert Path(".workshop/config.toml") in result.preserved
+
+
+def test_adopt_writes_gitignore_when_missing(tmp_path: Path) -> None:
+    """If the target has no .gitignore, adopt drops one in."""
+    target = _make_existing_project(tmp_path)
+    result = adopt(target, tier="production", language="python")
+    gi = target / ".gitignore"
+    assert gi.is_file()
+    assert ".joinery/" in gi.read_text(encoding="utf-8")
+    assert Path(".gitignore") in result.written
+
+
+def test_adopt_preserves_existing_gitignore(tmp_path: Path) -> None:
+    """If the user already has a .gitignore, adopt leaves it alone (non-destructive default)."""
+    target = _make_existing_project(tmp_path)
+    custom = "# my custom rules\nsecret_thing/\n"
+    (target / ".gitignore").write_text(custom, encoding="utf-8")
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "add", ".gitignore"],
+        cwd=target,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-m",
+            "add gitignore",
+        ],
+        cwd=target,
+        check=True,
+        capture_output=True,
+    )
+    result = adopt(target, tier="production", language="python")
+    assert (target / ".gitignore").read_text(encoding="utf-8") == custom
+    assert Path(".gitignore") in result.preserved
