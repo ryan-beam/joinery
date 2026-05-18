@@ -6,6 +6,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added — `/debug` skill (audit-driven port #3)
+
+Four-phase systematic debugging: **reproduce → isolate → understand → fix**, with the load-bearing rule "no fix without identified root cause." Each phase has a stop condition before moving to the next, so the discipline holds against the temptation to skip from "I see what's wrong" to "let me try this."
+
+The skill teaches:
+- **Phase 1 (Reproduce)** — precise symptom statement + deterministic minimum reproduction. 30-min cap then surface non-determinism honestly.
+- **Phase 2 (Isolate)** — bisect, remove suspected causes one at a time, narrow to specific line/branch.
+- **Phase 3 (Understand)** — state root cause as one sentence that survives three "but why" questions. Predict what fixing it should change. Verify hypothesis BEFORE writing the fix.
+- **Phase 4 (Fix)** — failing test first, fix the root cause not the symptom, verify predicted change happens, grep for siblings with the same shape.
+
+Output template at session end produces a short report (symptom / repro / root cause / fix / siblings checked / test added) suitable for PR descriptions.
+
+Adapted from obra/superpowers v5.1.0 `systematic-debugging`. Tier-agnostic — applies in `production`, `standard`, and `sketch`.
+
 ### Added — SessionStart hook + `using-joinery` meta-skill (audit-driven port)
 
 The first port from the obra/superpowers audit (see `docs/audits/obra-superpowers-2026-05-18.md` §4 PR #1). Closes part of the deferred-audit gap and lays the foundation for several downstream ports.
