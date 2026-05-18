@@ -6,6 +6,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added — `/verify` skill (audit-driven port #4)
+
+Evidence-before-claims gate. Forces production of concrete evidence — test output, command + output, log excerpt, screenshot, DB query — before any work is declared "done" or "working." Protects against the most common AI-era failure mode: declaring work done because the response sounded coherent, not because the result was confirmed.
+
+Discipline: **a claim is not evidence.** "It should work now" is not "it works now." The skill's output template requires a specific claim, an evidence type, the actual evidence pasted (not summarized — pasted), and a verdict of `verified | partial | failed`.
+
+Pairs with `/debug` (verify the fix) and `/explain-back` (verify before summarizing). Tier-agnostic but most strictly applied in `production`.
+
+Adapted from obra/superpowers v5.1.0 `verification-before-completion`.
+
 ### Added — `/debug` skill (audit-driven port #3)
 
 Four-phase systematic debugging: **reproduce → isolate → understand → fix**, with the load-bearing rule "no fix without identified root cause." Each phase has a stop condition before moving to the next, so the discipline holds against the temptation to skip from "I see what's wrong" to "let me try this."
