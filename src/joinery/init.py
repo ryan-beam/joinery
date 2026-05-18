@@ -164,22 +164,42 @@ def write_workshop_state(
 def install_skills(
     target: Path, *, skip_existing: bool = False, dry_run: bool = False
 ) -> tuple[list[Path], list[Path]]:
-    """Copy skills/*.md into .claude/skills/ for Claude Code recognition."""
+    """Copy skills/*.md into BOTH .claude/skills/ and .claude/commands/.
+
+    `.claude/skills/` matches Claude Code's user-global skill location
+    (~/.claude/skills/) and is the format Joinery's docs reference. Some
+    Claude Code configurations also auto-discover project-local skills from
+    here.
+
+    `.claude/commands/` is the canonical location for Claude Code's
+    project-local slash commands. Writing skills here too means users can
+    invoke `/mark`, `/plan`, `/sq`, etc. as explicit slash commands inside
+    their Claude Code session for the project — which is the experience
+    users expect when they type `/<skill-name>`.
+
+    Both directories receive identical content so the framework works in
+    either invocation style.
+    """
     written: list[Path] = []
     preserved: list[Path] = []
     skills_src = skills_dir()
     if not skills_src.is_dir():
         return written, preserved
+    targets = (
+        target / ".claude" / "skills",
+        target / ".claude" / "commands",
+    )
     for skill_file in sorted(skills_src.glob("*.md")):
         if skill_file.name == "README.md":
             continue  # placeholder, not a real skill
-        dest = target / ".claude" / "skills" / skill_file.name
-        rel = dest.relative_to(target)
-        if skip_existing and dest.exists():
-            preserved.append(rel)
-            continue
-        copy_static(skill_file, dest, dry_run=dry_run)
-        written.append(rel)
+        for target_dir in targets:
+            dest = target_dir / skill_file.name
+            rel = dest.relative_to(target)
+            if skip_existing and dest.exists():
+                preserved.append(rel)
+                continue
+            copy_static(skill_file, dest, dry_run=dry_run)
+            written.append(rel)
     return written, preserved
 
 

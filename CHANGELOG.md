@@ -6,6 +6,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Changed — `install_skills` writes to both `.claude/skills/` AND `.claude/commands/`
+
+Joinery scaffolds the 23 skill files into a Claude Code project. Before this change they landed only in `.claude/skills/` — which matches Claude Code's user-global skills convention (`~/.claude/skills/`) but does NOT make them invokable as project-local slash commands. Users running `/mark`, `/plan`, `/sq` got "Unknown command" errors because Claude Code's project-local slash commands live in `.claude/commands/`.
+
+`install_skills` now writes the same 23 files to **both** locations. Same content, two paths, both invocation styles work:
+
+- `.claude/skills/` — auto-discovery (where Claude Code's skill system looks)
+- `.claude/commands/` — explicit `/<skill-name>` invocation
+
+`workshop adopt` benefits the same way (it calls `install_skills` too). New init/adopt projects get clean slash-command access out of the box; existing projects can re-run `workshop update` to pick up the second location.
+
+Two new tests: `test_scaffold_installs_skills_to_both_locations` (verifies parity between the two dirs) and `test_scaffold_version_string_matches_package` (catches a future regression where the managed-by marker drifts from the package version).
+
+### Fixed — `pyproject.toml` version bumped to 0.1.6
+
+The version string in `pyproject.toml` and `src/joinery/__init__.py` was stuck at `0.1.0` despite multiple feature releases shipping (workshop adopt, answers file, safety scan, dry-run, transaction log, rollback, diff/update, gitignore scaffold, pre-push bootstrap fix, skills→commands location fix). Bumped to `0.1.6` to reflect the actual state. Test for `workshop --version` now reads from `__version__` instead of hardcoding the literal, so future bumps don't silently regress.
+
 ### Fixed — pre-push hook blocked the bootstrap push of `main`
 
 The production-tier `pre-push` hook refused every push that touched `refs/heads/main`, including the very first push that *creates* the branch on the remote. New projects couldn't ship their initial commit without bypassing the hook, defeating the framework's branching discipline before it even started.
