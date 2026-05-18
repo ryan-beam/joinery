@@ -66,10 +66,13 @@ def test_promote_paths(tmp_path: Path, source_tier: str, target_tier: str) -> No
 
 
 def test_cli_version() -> None:
+    """Version output must reflect the actual package version, not be hardcoded."""
+    from joinery import __version__
+
     runner = CliRunner()
     result = runner.invoke(main, ["--version"])
     assert result.exit_code == 0
-    assert "0.1.0" in result.output
+    assert __version__ in result.output
 
 
 def test_cli_help() -> None:

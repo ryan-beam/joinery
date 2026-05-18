@@ -183,3 +183,37 @@ def test_scaffold_gitignore_in_manifest(tmp_path: Path) -> None:
     manifest = read_manifest(target)
     assert manifest is not None
     assert ".gitignore" in manifest.managed_files
+
+
+def test_scaffold_installs_skills_to_both_locations(tmp_path: Path) -> None:
+    """Skills must land in BOTH .claude/skills/ (user-global style) AND
+    .claude/commands/ (Claude Code project-local slash commands) so users
+    get auto-discovery + explicit /skill-name invocation both."""
+    target = tmp_path / "p"
+    scaffold(target=target, project_name="p", tier="production", language="python", init_git=False)
+
+    skills_dir = target / ".claude" / "skills"
+    commands_dir = target / ".claude" / "commands"
+
+    assert skills_dir.is_dir()
+    assert commands_dir.is_dir()
+
+    # Both dirs should contain the same set of skill files (no README).
+    skills_files = {p.name for p in skills_dir.glob("*.md")}
+    commands_files = {p.name for p in commands_dir.glob("*.md")}
+    assert skills_files == commands_files
+    assert "mark.md" in skills_files
+    assert "plan.md" in skills_files
+    assert "sq.md" in skills_files
+    assert "README.md" not in skills_files  # README is filtered out
+
+
+def test_scaffold_version_string_matches_package(tmp_path: Path) -> None:
+    """When the framework writes managed-by markers and answer files, the
+    version must match the package version — never the stale 0.1.0 hardcode."""
+    from joinery import __version__
+
+    target = tmp_path / "p"
+    scaffold(target=target, project_name="p", tier="standard", language="python", init_git=False)
+    claude_text = (target / "CLAUDE.md").read_text(encoding="utf-8")
+    assert f"managed-by: joinery@{__version__}" in claude_text
