@@ -32,8 +32,31 @@ def run_doctor(project_root: Path) -> None:
     click.echo(f"  joinery-cli version        {__version__}")
     ccs_status = "found" if shutil.which("ccstatusline") else "not detected"
     click.echo(f"  ccstatusline               {ccs_status}")
-    roborev_status = "found" if shutil.which("roborev") else "not installed (fallback active)"
-    click.echo(f"  roborev                    {roborev_status}")
+    if shutil.which("roborev"):
+        click.echo("  roborev                    found")
+        # Check daemon health — roborev runs an always-on background daemon
+        # that drives the per-commit review work. If the daemon is down, the
+        # post-commit hook still enqueues commits but they don't get reviewed.
+        try:
+            import subprocess
+
+            result = subprocess.run(
+                ["roborev", "status"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            if result.returncode == 0:
+                click.echo("    daemon:                  healthy")
+            else:
+                click.echo(
+                    "    daemon:                  NOT HEALTHY (run `roborev status` for details)"
+                )
+        except (subprocess.TimeoutExpired, OSError):
+            click.echo("    daemon:                  unable to check (roborev status timed out)")
+    else:
+        click.echo("  roborev                    not installed (run `workshop setup` to install)")
     click.echo("")
 
     config_path = project_root / ".workshop" / "config.toml"

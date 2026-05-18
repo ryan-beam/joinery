@@ -6,6 +6,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Fixed — roborev integration corrected against real-world v0.55.0 behavior
+
+Followed up on `workshop setup` shipping with several identifiers that turned out to be wrong. Verified against roborev's actual README + v0.55.0 release notes (2026-05-15) and patched:
+
+**Install paths (workshop setup):**
+- **Removed:** Windows `winget install --id roborev.roborev -e` — no such winget package exists.
+- **Removed:** Windows `scoop install roborev` — no such scoop bucket exists.
+- **Added:** Windows PowerShell install: `powershell -ExecutionPolicy ByPass -c "irm https://roborev.io/install.ps1 | iex"` — roborev's actual official Windows install path per the README.
+- **Added:** Universal `go install github.com/roborev-dev/roborev/cmd/roborev@latest` fallback for users with Go 1.25+.
+- macOS brew tap (`brew install roborev-dev/tap/roborev`) and Linux curl one-liner are unchanged — these were already correct.
+
+**Per-project init:** `workshop setup` now also runs `roborev init` if invoked from inside a Joinery project (cwd has `.git` + `.workshop`). This installs roborev's own post-commit + post-rewrite hooks in that project, which is what actually enables auto-fire on every commit. Previously the user had to remember this manually.
+
+**Pre-push hook (the critical fix):** the hook was reading `reviews/<sha>.md` files that **roborev never writes** — reviews live in a SQLite DB at `~/.roborev/reviews.db`. The hook would have silently let every push through regardless of findings. Now uses `roborev show <sha> --json | jq -e '...'` to query for unresolved critical/high findings on each commit in the push range, refusing the push if any exist. Graceful degradation: if `roborev` or `jq` isn't installed, the gate is skipped silently (users without roborev don't get spurious push failures).
+
+**Severity vocabulary in `/review` skill:** updated from `Critical / Important / Nits` (Joinery's original spec) to roborev's actual four-tier `critical / high / medium / low`. The fallback path (when roborev isn't installed) still writes `reviews/<sha>.md` markdown files, but uses the same vocabulary for consistency.
+
+**`workshop doctor` enhancements:** when roborev is found, also runs `roborev status` to check daemon health — surfaces "daemon: healthy" / "NOT HEALTHY" / "unable to check" so users catch a dead background daemon before it silently stops reviewing.
+
+Honest note: the pre-push jq filter pattern (`.findings[].severity`, `.status`) is inferred from roborev v0.55.0's documented `--json` output shape. If the JSON schema shifts in a future roborev release, the filter may need adjustment. Field names checked: `severity` falls through to `level` if absent; status normalization handles `resolved`, `dismissed`, `fixed`.
+
 ### Added — `workshop setup` installs roborev cross-platform
 
 Closes the friction surfaced during the placket-ops dogfood: the framework adopted roborev as the auto-review engine but had no way to actually install it — users had to know about `brew install roborev-dev/tap/roborev` (which doesn't work on Windows / Linux-without-brew anyway) and remember to run it. That breaks the "unified framework" promise.

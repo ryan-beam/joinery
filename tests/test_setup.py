@@ -32,21 +32,39 @@ def test_build_install_attempts_includes_curl_fallback() -> None:
 
 
 def test_build_install_attempts_macos_prefers_brew() -> None:
-    """On macOS, brew should be the first attempt before curl fallback."""
+    """On macOS, brew should be the first attempt; go install is the universal last resort."""
     with mock.patch("joinery.setup.platform.system", return_value="Darwin"):
         attempts = _build_install_attempts()
     assert "Homebrew" in attempts[0].label
-    assert "curl" in attempts[-1].label
+    assert "go install" in attempts[-1].label
+    # curl install sits between native-package-manager and go-fallback
+    labels = [a.label for a in attempts]
+    assert any("curl install" in label for label in labels)
 
 
-def test_build_install_attempts_windows_tries_winget_and_scoop() -> None:
-    """Windows should try winget and scoop before the curl fallback."""
+def test_build_install_attempts_windows_uses_powershell() -> None:
+    """Windows uses the PowerShell install script (roborev's official Windows path).
+    winget / scoop / chocolatey don't have roborev — verified via roborev README."""
     with mock.patch("joinery.setup.platform.system", return_value="Windows"):
         attempts = _build_install_attempts()
     labels = [a.label for a in attempts]
-    assert any("winget" in label for label in labels)
-    assert any("Scoop" in label for label in labels)
+    assert any("PowerShell" in label for label in labels)
     assert any("curl install" in label for label in labels)
+    assert any("go install" in label for label in labels)
+    # Explicit negatives — the previous (wrong) identifiers must not return.
+    assert not any("winget" in label for label in labels)
+    assert not any("Scoop" in label for label in labels)
+
+
+def test_build_install_attempts_all_platforms_include_go_fallback() -> None:
+    """Every platform should have the `go install` route as the universal fallback."""
+    for system_name in ("Darwin", "Linux", "Windows"):
+        with mock.patch("joinery.setup.platform.system", return_value=system_name):
+            attempts = _build_install_attempts()
+        labels = [a.label for a in attempts]
+        assert any("go install" in label for label in labels), (
+            f"go install missing for {system_name}: {labels}"
+        )
 
 
 def test_setup_runs_attempts_in_order_until_one_succeeds() -> None:

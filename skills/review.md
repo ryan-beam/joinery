@@ -26,16 +26,17 @@ Auto-fires on production tier (managed by roborev's post-commit hook). Manually 
 
 4. **For the fallback path,** the reviewer prompt asks the model to:
    - Read the diff with a "find what's wrong" mindset
-   - Surface findings in three severities: Critical, Important, Nits
-   - Critical = bugs, security issues, contract violations
-   - Important = error handling gaps, unclear naming, design smells
-   - Nits = style, formatting, minor inconsistencies
-   - Output as `reviews/<commit-hash>.md` with frontmatter and three sections
+   - Surface findings in **roborev's four-tier severity scale**: `critical / high / medium / low`
+   - `critical` = bugs that cause data loss, security holes, contract violations, money-safety failures
+   - `high` = error handling gaps that bite under realistic load, missing validation on user-facing input, race conditions
+   - `medium` = unclear naming, design smells, missing tests, brittle assumptions
+   - `low` = style, formatting, minor inconsistencies (roborev's "nit" tier)
+   - Output as `reviews/<commit-hash>.md` markdown for the fallback path (when roborev isn't installed). When roborev IS installed, reviews live in its SQLite DB at `~/.roborev/reviews.db` and are accessed via `roborev show <sha> --json` or `roborev tui`.
 
 5. **Severity-graded action:**
-   - Critical findings present → write `.reviews-blocked` marker file (pre-push hook reads this)
-   - Important → log in `reviews/<commit-hash>.md`, no blocking
-   - Nits → log only
+   - `critical` or `high` findings present → pre-push hook refuses the push (queries roborev via `roborev show <sha> --json` and parses JSON; for fallback path, parses the markdown headers)
+   - `medium` → logged, no blocking
+   - `low` → logged only
 
 ## Output format
 
