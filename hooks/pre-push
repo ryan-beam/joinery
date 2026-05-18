@@ -25,12 +25,23 @@ print(f'MAIN_BRANCH={c[\"git\"][\"branching\"][\"main_branch\"]}')
 
 [ "${ENABLED:-true}" != "true" ] && exit 0
 
-# Refuse direct main pushes on production tier
+# Refuse direct main pushes on production tier — but allow the very first
+# bootstrap push that CREATES the main branch on the remote. Subsequent
+# pushes (updates) still go through feature-branch + PR.
+ZERO_SHA="0000000000000000000000000000000000000000"
 if [ "${REQUIRE_BRANCH:-true}" = "true" ]; then
     while read -r local_ref local_sha remote_ref remote_sha; do
+        # Strip trailing CR in case stdin uses CRLF line endings (Windows git).
+        remote_sha="${remote_sha%$'\r'}"
         REMOTE_BRANCH="${remote_ref##*/}"
         CURRENT=$(git branch --show-current)
         if [ "$REMOTE_BRANCH" = "${MAIN_BRANCH:-main}" ] && [ "$CURRENT" = "$REMOTE_BRANCH" ]; then
+            # remote_sha is all zeros when the ref doesn't exist on the
+            # remote yet — i.e. this push is CREATING the branch (bootstrap).
+            # Updates to an existing remote main still get refused.
+            if [ "$remote_sha" = "$ZERO_SHA" ]; then
+                continue
+            fi
             echo "pre-push refused: production tier requires a feature branch for changes to '$REMOTE_BRANCH'."
             echo "See docs/spec.md section 13 (Branching strategy). Create a feature branch:"
             echo "  git checkout -b feat/<short-summary>"
