@@ -217,3 +217,32 @@ def test_scaffold_version_string_matches_package(tmp_path: Path) -> None:
     scaffold(target=target, project_name="p", tier="standard", language="python", init_git=False)
     claude_text = (target / "CLAUDE.md").read_text(encoding="utf-8")
     assert f"managed-by: joinery@{__version__}" in claude_text
+
+
+def test_scaffold_installs_session_start_hook(tmp_path: Path) -> None:
+    """The Joinery SessionStart hook must be scaffolded — script + settings.json."""
+    target = tmp_path / "p"
+    scaffold(target=target, project_name="p", tier="production", language="python", init_git=False)
+
+    hook_script = target / ".workshop" / "hooks" / "session_start.py"
+    settings_file = target / ".claude" / "settings.json"
+
+    assert hook_script.is_file()
+    assert settings_file.is_file()
+
+    settings_text = settings_file.read_text(encoding="utf-8")
+    assert "SessionStart" in settings_text
+    assert "session_start.py" in settings_text
+
+    hook_text = hook_script.read_text(encoding="utf-8")
+    assert "hookEventName" in hook_text
+    assert "additionalContext" in hook_text
+
+
+def test_scaffold_using_joinery_skill_present(tmp_path: Path) -> None:
+    """The using-joinery meta-skill must ship to both .claude/ locations
+    so the SessionStart hook can read it for additionalContext injection."""
+    target = tmp_path / "p"
+    scaffold(target=target, project_name="p", tier="production", language="python", init_git=False)
+    assert (target / ".claude" / "skills" / "using-joinery.md").is_file()
+    assert (target / ".claude" / "commands" / "using-joinery.md").is_file()
