@@ -118,6 +118,58 @@ def write_gitignore(
     return [], [rel]
 
 
+def write_session_start_hook(
+    target: Path,
+    ctx: dict[str, Any],
+    *,
+    skip_existing: bool = False,
+    dry_run: bool = False,
+) -> tuple[list[Path], list[Path]]:
+    """Install the SessionStart hook + Claude Code settings.json.
+
+    Two files get written:
+      - `.workshop/hooks/session_start.py` — the hook script Claude Code invokes
+        at every session start (startup, /clear, /compact). Reads project state
+        and emits JSON with additionalContext.
+      - `.claude/settings.json` — Claude Code's per-project settings, configures
+        the SessionStart hook to invoke the script above.
+
+    The using-joinery meta-skill (installed via `install_skills`) is the actual
+    content that gets read and injected; this pair just wires the hook plumbing.
+
+    Ported from obra/superpowers v5.x SessionStart pattern. See
+    docs/audits/obra-superpowers-2026-05-18.md.
+    """
+    written: list[Path] = []
+    preserved: list[Path] = []
+
+    hook_src = templates_dir() / "session_start_hook.py.template"
+    hook_dest = target / ".workshop" / "hooks" / "session_start.py"
+    rel = hook_dest.relative_to(target)
+    if skip_existing and hook_dest.exists():
+        preserved.append(rel)
+    else:
+        copy_static(hook_src, hook_dest, dry_run=dry_run)
+        if not dry_run:
+            # Make the hook executable on POSIX. No-op on Windows.
+            try:
+                hook_dest.chmod(0o755)
+            except (OSError, NotImplementedError):
+                pass
+        written.append(rel)
+
+    settings_src = templates_dir() / "claude-settings.json.template"
+    settings_dest = target / ".claude" / "settings.json"
+    rel = settings_dest.relative_to(target)
+    if skip_existing and settings_dest.exists():
+        preserved.append(rel)
+    else:
+        copy_static(settings_src, settings_dest, dry_run=dry_run)
+        written.append(rel)
+
+    return written, preserved
+
+
 def write_workshop_state(
     target: Path,
     tier: str,
@@ -264,6 +316,7 @@ def scaffold(
     written += write_gitignore(target, language, ctx, dry_run=dry_run)[0]
     written += write_workshop_state(target, tier, ctx, dry_run=dry_run)[0]
     written += install_skills(target, dry_run=dry_run)[0]
+    written += write_session_start_hook(target, ctx, dry_run=dry_run)[0]
 
     hook_names_installed: list[str] = []
     if init_git:

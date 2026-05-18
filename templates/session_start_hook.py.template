@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+"""Joinery SessionStart hook — injects orientation context into every new session.
+
+Triggered by Claude Code's SessionStart event (startup, /clear, /compact). Reads
+the project's Joinery state and emits JSON with `additionalContext` that gets
+prepended to the new session's context window.
+
+Output format (per Claude Code hook protocol):
+    {
+      "hookSpecificOutput": {
+        "hookEventName": "SessionStart",
+        "additionalContext": "<text injected at session start>"
+      }
+    }
+
+This hook is installed into `.workshop/hooks/session_start.py` by `workshop
+init` / `workshop adopt`. The Claude Code settings.json hook config points
+here. If anything in this script fails, the hook silently emits no context so
+the session still starts cleanly.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+
+
+def _project_root() -> Path:
+    """Resolve project root. Prefers CLAUDE_PROJECT_DIR env var; falls back to script location."""
+    env = os.environ.get("CLAUDE_PROJECT_DIR")
+    if env:
+        return Path(env)
+    # This file lives at <project_root>/.workshop/hooks/session_start.py
+    return Path(__file__).resolve().parents[2]
+
+
+def _safe_read(path: Path, *, max_chars: int = 4000) -> str:
+    """Read a file's text, truncated to max_chars. Empty string on any failure."""
+    try:
+        text = path.read_text(encoding="utf-8")
+        if len(text) > max_chars:
+            return text[:max_chars] + f"\n\n[... truncated, full file at {path}]"
+        return text
+    except Exception:
+        return ""
+
+
+def _read_tier(root: Path) -> str:
+    """Read the project tier from .workshop/tier.lock. Returns '' if missing."""
+    return _safe_read(root / ".workshop" / "tier.lock", max_chars=64).strip()
+
+
+def _open_side_quests(root: Path) -> list[str]:
+    """Return a list of one-line summaries of side quests still open."""
+    sq_path = root / "learning" / "side-quests.md"
+    text = _safe_read(sq_path, max_chars=60000)
+    if not text:
+        return []
+    opens: list[str] = []
+    current_id: str | None = None
+    current_title: str | None = None
+    current_status: str | None = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("## SQ-"):
+            # Flush prior entry
+            if (
+                current_id
+                and current_title
+                and (current_status or "").lower() == "open"
+            ):
+                opens.append(f"  - {current_id}: {current_title}")
+            # Start new
+            head = line[3:].strip()  # drop "## "
+            if ":" in head:
+                current_id, current_title = (s.strip() for s in head.split(":", 1))
+            else:
+                current_id = head
+                current_title = ""
+            current_status = None
+        elif line.startswith("- **Status:**"):
+            current_status = line.split("**Status:**", 1)[1].strip()
+    # Flush last
+    if current_id and current_title and (current_status or "").lower() == "open":
+        opens.append(f"  - {current_id}: {current_title}")
+    return opens
+
+
+def _compose_context(root: Path) -> str:
+    """Build the additionalContext string for the session."""
+    tier = _read_tier(root) or "(unknown)"
+    using_joinery = _safe_read(
+        root / ".claude" / "skills" / "using-joinery.md", max_chars=8000
+    )
+    handover_excerpt = _safe_read(root / "HANDOVER.md", max_chars=2000)
+    open_sqs = _open_side_quests(root)
+    plan_present = (root / "plan.md").is_file()
+
+    lines: list[str] = []
+    lines.append("# Joinery session start — auto-injected context")
+    lines.append("")
+    lines.append(f"**Tier:** {tier}")
+    lines.append(f"**plan.md:** {'present' if plan_present else 'missing (run /plan)'}")
+    if open_sqs:
+        lines.append(f"**Open side quests:** {len(open_sqs)}")
+        lines.extend(open_sqs[:10])  # cap at 10 to keep context small
+        if len(open_sqs) > 10:
+            lines.append(
+                f"  - ... and {len(open_sqs) - 10} more (see learning/side-quests.md)"
+            )
+    else:
+        lines.append(
+            "**Open side quests:** none (or learning/side-quests.md not yet populated)"
+        )
+    lines.append("")
+    if handover_excerpt:
+        lines.append("## Last session HANDOVER")
+        lines.append("")
+        lines.append(handover_excerpt)
+        lines.append("")
+    if using_joinery:
+        lines.append("## Skill: using-joinery (auto-loaded)")
+        lines.append("")
+        lines.append(using_joinery)
+    return "\n".join(lines)
+
+
+def main() -> int:
+    try:
+        root = _project_root()
+        context = _compose_context(root)
+        output = {
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": context,
+            }
+        }
+        json.dump(output, sys.stdout)
+        sys.stdout.write("\n")
+        return 0
+    except Exception:
+        # Never break session start. Silent fallback.
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

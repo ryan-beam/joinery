@@ -6,6 +6,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added — SessionStart hook + `using-joinery` meta-skill (audit-driven port)
+
+The first port from the obra/superpowers audit (see `docs/audits/obra-superpowers-2026-05-18.md` §4 PR #1). Closes part of the deferred-audit gap and lays the foundation for several downstream ports.
+
+What it does: every time a Claude Code session opens on a Joinery project — at startup, after `/clear`, or after `/compact` — a SessionStart hook fires that auto-injects an orientation block into the session's context. The block contains:
+
+- The project's tier (`production` / `standard` / `sketch`) read from `.workshop/tier.lock`
+- Whether `plan.md` is present
+- A summary of currently-open side quests (parsed from `learning/side-quests.md`)
+- The last session's HANDOVER content (if present)
+- The full `using-joinery.md` meta-skill content (rules, available skills, the 5-phase rhythm)
+
+The agent therefore starts every session already oriented — knowing which tier governs, which side quests are open, what skill catalog is available, and what rules to never violate. No more "what is Joinery, what tier am I in, what's the workflow" rediscovery cost per session.
+
+Three new artifacts ship under `workshop init` / `workshop adopt`:
+
+- `joinery/skills/using-joinery.md` — the meta-skill content (mirrored to both `.claude/skills/` and `.claude/commands/`)
+- `joinery/templates/session_start_hook.py.template` → installed as `.workshop/hooks/session_start.py` in the target project, runs as a Python script (cross-platform, no shell deps)
+- `joinery/templates/claude-settings.json.template` → installed as `.claude/settings.json` in the target project, wires the SessionStart hook config to invoke the script
+
+The hook is fail-safe: if anything inside the script throws, it returns empty `additionalContext` so the session still opens cleanly. No crash path.
+
+Implementation: new `write_session_start_hook()` helper in `init.py`, called from both `scaffold()` and `adopt()`. Two new tests covering hook+settings install and the using-joinery skill landing in both `.claude/` dirs.
+
+Pattern ported from obra/superpowers v5.1.0's SessionStart hook + `using-superpowers` meta-skill. Joinery's version reads project-local state (tier, side quests, HANDOVER) which the upstream doesn't, because Joinery is project-local-by-design.
+
 ### Changed — `install_skills` writes to both `.claude/skills/` AND `.claude/commands/`
 
 Joinery scaffolds the 23 skill files into a Claude Code project. Before this change they landed only in `.claude/skills/` — which matches Claude Code's user-global skills convention (`~/.claude/skills/`) but does NOT make them invokable as project-local slash commands. Users running `/mark`, `/plan`, `/sq` got "Unknown command" errors because Claude Code's project-local slash commands live in `.claude/commands/`.

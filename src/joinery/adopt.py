@@ -23,6 +23,7 @@ from joinery.init import (
     write_gitignore,
     write_learning_module,
     write_project_files,
+    write_session_start_hook,
     write_tier_adr,
     write_workshop_state,
 )
@@ -140,6 +141,10 @@ def adopt(
     result.preserved.extend(p)
 
     w, p = install_skills(target, skip_existing=skip_existing, dry_run=dry_run)
+    result.written.extend(w)
+    result.preserved.extend(p)
+
+    w, p = write_session_start_hook(target, ctx, skip_existing=skip_existing, dry_run=dry_run)
     result.written.extend(w)
     result.preserved.extend(p)
 
