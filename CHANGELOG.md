@@ -6,6 +6,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added — `workshop setup` installs roborev cross-platform
+
+Closes the friction surfaced during the placket-ops dogfood: the framework adopted roborev as the auto-review engine but had no way to actually install it — users had to know about `brew install roborev-dev/tap/roborev` (which doesn't work on Windows / Linux-without-brew anyway) and remember to run it. That breaks the "unified framework" promise.
+
+`workshop setup` is the one-time global setup command. Detects platform, runs the appropriate install path:
+
+- **macOS:** `brew install roborev-dev/tap/roborev`
+- **Linux:** Homebrew on Linux if present
+- **Windows:** `winget install --id roborev.roborev -e` → falls back to `scoop install roborev`
+- **Universal fallback (any OS):** `bash -c "curl -fsSL https://roborev.io/install.sh | bash"` — requires `bash` and `curl` (Git Bash on Windows works)
+
+Each attempt is tier-aware: prerequisite tool missing → skipped quietly (not an error). Each install has a 300s timeout. On total failure, prints a clear next-step block pointing at the install docs URL and explicitly noting that the framework still works (`/review` falls back to Claude Code built-in); only the auto-fire-on-commit behavior requires roborev specifically.
+
+Idempotent: if `roborev` is already on PATH, the command is a no-op.
+
+Confirmation prompt before installing (skippable with `--yes` for CI / scripted use) — user consent before system-level package installs.
+
+Implementation: new `joinery/setup.py` module + `workshop setup` CLI command. 6 new tests covering the no-op path, platform-specific attempt construction, short-circuit on first success, and the failure-help formatting.
+
 ### Changed — `workshop session end` is now a real orchestrator (audit-driven port #5)
 
 Closes the deferred-audit gap #3 — `workshop session end` previously printed framing but did not actually drive the session-close sequence. Now it does, in two coordinated layers:

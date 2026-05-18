@@ -14,6 +14,7 @@ Subcommands:
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import click
@@ -525,6 +526,74 @@ def session_start_command() -> None:
 def session_end_command() -> None:
     """Compose explain-back + handover + sq reconcile + token report."""
     session_end(Path.cwd())
+
+
+@main.command("setup")
+@click.option(
+    "--yes",
+    "-y",
+    is_flag=True,
+    default=False,
+    help="Install without prompting. For CI / scripted use.",
+)
+def setup_command(yes: bool) -> None:
+    """One-time global setup: install external tools Joinery integrates with.
+
+    Currently installs roborev (the adversarial review engine) if not present.
+    Cross-platform: tries the native package manager first (brew on macOS/Linux,
+    winget/scoop on Windows), then a universal curl install script. Each attempt
+    fails gracefully — if all fail, you get a clear next-step message.
+
+    Idempotent: re-running after success is a no-op.
+    """
+    from joinery.setup import format_failure_help, run_setup
+
+    click.echo("Workshop setup")
+    click.echo("==============")
+    click.echo("")
+
+    if shutil.which("roborev"):
+        click.echo("roborev:        already installed (skipping)")
+        click.echo("")
+        click.echo("Setup complete. `workshop doctor` should now show roborev: found.")
+        return
+
+    click.echo("roborev:        not installed")
+    click.echo("")
+    click.echo("Joinery's adversarial review (auto-fire on every commit) depends on")
+    click.echo("roborev. The framework still works without it via Claude Code's built-in")
+    click.echo("`/review` skill, but you'd have to invoke review manually each time.")
+    click.echo("")
+
+    if not yes:
+        if not click.confirm("Install roborev now?", default=True):
+            click.echo("")
+            click.echo("Skipped. Re-run `workshop setup` any time to install.")
+            return
+
+    click.echo("")
+    click.echo("Attempting install (cross-platform, multi-strategy)...")
+    click.echo("")
+    result = run_setup(assume_yes=True)
+
+    for attempt in result.attempts:
+        if not attempt.available:
+            click.echo(f"  - {attempt.label}: skipped (prereq missing)")
+        elif attempt.success:
+            click.echo(f"  - {attempt.label}: SUCCESS")
+        else:
+            err = attempt.error.strip().splitlines()[0] if attempt.error.strip() else "non-zero exit"
+            click.echo(f"  - {attempt.label}: failed ({err})")
+
+    click.echo("")
+    if result.roborev_installed:
+        click.echo("roborev installed successfully.")
+        click.echo("Next: run `workshop doctor` to verify.")
+        click.echo(
+            "In your projects, roborev's post-commit hook will auto-fire on every commit."
+        )
+    else:
+        click.echo(format_failure_help(result))
 
 
 @main.command("promote")
