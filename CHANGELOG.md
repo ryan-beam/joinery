@@ -6,6 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Fixed — pre-push hook blocked the bootstrap push of `main`
+
+The production-tier `pre-push` hook refused every push that touched `refs/heads/main`, including the very first push that *creates* the branch on the remote. New projects couldn't ship their initial commit without bypassing the hook, defeating the framework's branching discipline before it even started.
+
+- The hook now distinguishes `remote_sha == 0…0` (ref doesn't exist on remote yet — bootstrap) from a real update sha. Bootstrap pushes pass; updates to an existing remote main still get refused, exactly as designed.
+- The hook also trims a potential trailing `\r` from the SHA so CRLF-formatted stdin (Windows git, some refspecs) doesn't poison the equality check.
+- 3 new tests under `tests/test_hooks_pre_push.py` exercising bootstrap creation, main-update refusal, and feature-branch passthrough. Skipped automatically when `bash` is unavailable.
+
 ### Added — scaffolded `.gitignore`
 
 `workshop init` and `workshop adopt` now write a language-appropriate `.gitignore` at the project root. Previously neither command scaffolded one, leaving fresh projects with `.joinery/` audit state and `.env` files visible to `git status` and at risk of being committed.
