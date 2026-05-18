@@ -6,6 +6,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Changed — `workshop session end` is now a real orchestrator (audit-driven port #5)
+
+Closes the deferred-audit gap #3 — `workshop session end` previously printed framing but did not actually drive the session-close sequence. Now it does, in two coordinated layers:
+
+**CLI side (`workshop session end`)** runs deterministic branch-state checks before handing off to the agent:
+- Current branch + commits ahead of `origin/<main>` (configurable via `[git.branching] main_branch`)
+- Uncommitted-files check
+- Open PR detection via `gh pr list --head <branch>` (gracefully skipped if `gh` unavailable)
+- Tier surfaced explicitly
+
+The output is a state snapshot the agent can read at session-end time without re-running git itself.
+
+**Skill side (`/workshop-session-end`)** now drives 7 phases:
+1. **Verify tests pass** (hard gate — red = stop, don't proceed)
+2. **Detect branch state** (reads what the CLI surfaced)
+3. **Present the branch-finishing menu** — context-appropriate options depending on whether you're on main vs a feature branch, ahead of main, with/without an open PR
+4. **Execute the chosen path** — with a **production-tier `/review` gate before any merge**: no merge without a `reviews/<sha>.md` for the latest commit. Closes part of gap #1 (auto-review).
+5. **Comprehension gate** via `/explain-back`
+6. **`/handover` overwrites HANDOVER.md**
+7. **Side-quest reconciliation + primary/secondary ratio + token report**
+
+Pattern (verify → detect-environment → menu → execute) ported from obra/superpowers v5.1.0 `finishing-a-development-branch`. Joinery's version adds comprehension + handover + learning layers on top — upstream stops at branch-finishing, Joinery treats the session as the larger unit.
+
+The `/review` gate in Phase 4 means production-tier merges automatically get adversarial review unless the user explicitly opts out — fixing the "we shipped 5 cluster PRs without a single review running" pattern Ryan hit during the placket-ops dogfood.
+
 ### Added — `/verify` skill (audit-driven port #4)
 
 Evidence-before-claims gate. Forces production of concrete evidence — test output, command + output, log excerpt, screenshot, DB query — before any work is declared "done" or "working." Protects against the most common AI-era failure mode: declaring work done because the response sounded coherent, not because the result was confirmed.
