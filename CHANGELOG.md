@@ -6,6 +6,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Fixed — `workshop setup` writes to shell profiles on Windows
+
+After `workshop setup` installs roborev on Windows, `~/.roborev/bin` is added to the User-level PATH — but **Windows only propagates User PATH changes to NEWLY-STARTED terminal applications**, not to existing sessions or even new tabs in an already-open Windows Terminal / Cursor / VS Code. Result: users get `roborev: command not found` and don't know to fully relaunch every terminal app. Hit three separate times in production on 2026-05-19 (during placket-ops V-cluster work).
+
+**Fix:** `workshop setup` now appends an idempotent PATH-extending block to common shell startup files after a successful roborev install:
+
+- `~/.bashrc` — for Git Bash / WSL sessions
+- `%USERPROFILE%\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1` — for PowerShell sessions
+
+Each block is wrapped in an idempotency check (only extends PATH if `~/.roborev/bin` exists and isn't already in PATH), and the function itself scans for an existing `# Roborev (added by workshop setup)` marker before appending — so re-running `workshop setup` is a no-op rather than duplicating the block.
+
+No-op on macOS/Linux — native PATH propagation works correctly there, and `brew` / the curl installer handle their own shell-profile updates.
+
+The CLI output now surfaces which profiles were touched + the one-liners to source-in the change for already-open sessions (`source ~/.bashrc` or `. $PROFILE`).
+
+**`SetupResult`** gained a `shell_profiles_updated: list[str]` field. **`_ensure_shell_profiles_have_roborev_path()`** + **`_append_if_missing()`** + **`SHELL_PROFILE_MARKER`** added to `joinery/setup.py`. 8 new tests in `tests/test_setup.py` (`TestShellProfileBackfill` class) covering: no-op on macOS/Linux, writes to bashrc on Windows, writes to PowerShell profile on Windows, full idempotency (second run is no-op), respects existing pre-existing bashrc with marker, preserves existing bashrc content, silent on I/O failure.
+
+Drive-by: added `# noqa: S603,S607` to two pre-existing `subprocess.run` calls in `setup.py` that ruff now flagged on my touch. The patterns are safe (commands built from hardcoded lists, executables verified via `shutil.which` before invocation). Same pattern used in `joinery/git.py`.
+
 ### Fixed — version-source drift (CLAUDE.md rule #6)
 
 The May 19, 2026 scar: PRs #21/#22/#23 each bumped `pyproject.toml` (which pip reads) but left `src/joinery/__init__.py::__version__` at `0.1.12`. Pip reported `joinery-cli 0.1.15` while `workshop --version` reported `0.1.12`. Three silent releases drifted before someone ran `workshop --version` in a fresh terminal and noticed.
