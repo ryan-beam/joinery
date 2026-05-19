@@ -6,6 +6,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Fixed — version-source drift (CLAUDE.md rule #6)
+
+The May 19, 2026 scar: PRs #21/#22/#23 each bumped `pyproject.toml` (which pip reads) but left `src/joinery/__init__.py::__version__` at `0.1.12`. Pip reported `joinery-cli 0.1.15` while `workshop --version` reported `0.1.12`. Three silent releases drifted before someone ran `workshop --version` in a fresh terminal and noticed.
+
+**Local fix:** `src/joinery/__init__.py` now reports `0.1.16` (matches `pyproject.toml`).
+
+**Structural fix — prevents recurrence:**
+
+- **`scripts/bump_version.py`** — atomic version-bump helper. Reads both files, asserts they currently agree on the old version, writes the new version to both. Refuses to run if the two files already drift (forces manual reconciliation rather than burying the problem in a new value). Validates SemVer format. `python scripts/bump_version.py 0.1.16` is now the only sanctioned way to bump.
+
+- **`scripts/check_version_sync.py`** — pre-commit guard. Compares the two version sources and exits non-zero with a diagnostic if they disagree. Wired into `hooks/pre-commit` (only fires in the joinery repo itself; absent in adopted projects).
+
+- **`tests/test_version_sync.py`** — 8 new tests. Covers `check_version_sync.py` (passes when in sync, fails on drift with a diagnostic mentioning rule #6), `bump_version.py` (bumps both atomically, refuses to bury existing drift, rejects invalid SemVer including the subtle `1.2.3.4.5` case, accepts the `vX.Y.Z` ergonomic prefix, no-op when target == current), plus a live-repo invariant test that locks the actual joinery checkout's two version sources in sync under CI.
+
+- **`CLAUDE.md` rule #6** — codifies the scar per Joinery's own `/rule` discipline. One rule per real failure, linked to the incident that prompted it.
+
+Version: `0.1.15` → `0.1.16`. (`__init__.py` was reading `0.1.12` before this fix; both files now report `0.1.16`.)
+
 ### Added — roborev findings surfacing layer (audit-driven port #6)
 
 Closes the gap left by PR #20: roborev was correctly wired but intentionally does not surface findings to the developer beyond writing to its SQLite store at `~/.roborev/reviews.db`. Without an active surfacing layer, the pre-push hook would block on findings but the user wouldn't know findings existed until they tried to push. The framework owns this surfacing — that's what's new here.

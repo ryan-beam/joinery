@@ -12,6 +12,8 @@
 
 5. **Files outside `plan.md` §2 ("Files in scope") are off-limits.** If your edit touches a file not listed there, stop. Surface the deviation. Either update the plan and continue, or split the work into a new plan.
 
+6. **Version bumps update BOTH `pyproject.toml` AND `src/joinery/__init__.py`.** They drift silently otherwise — pip reads pyproject; `workshop --version` reads `__init__.py`. Use `python scripts/bump_version.py <X.Y.Z>` which updates both atomically. The pre-commit hook (`scripts/check_version_sync.py`) refuses commits where the two values disagree. *Scar: PRs #21/#22/#23 bumped pyproject only; `workshop --version` reported stale `0.1.12` while pip thought it was `0.1.15`. Three silent releases drifted before someone ran `workshop --version` and noticed.*
+
 ---
 
 ## Project context

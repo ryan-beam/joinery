@@ -50,4 +50,11 @@ if [ -f CLAUDE.md ] && [ -f AGENTS.md ] && ! diff -q CLAUDE.md AGENTS.md >/dev/n
     git add AGENTS.md
 fi
 
+# Joinery-internal: version sync check (CLAUDE.md rule #6).
+# Only runs in the joinery repo itself, where scripts/check_version_sync.py exists.
+# Generic adopted projects don't hit this — the script is absent there.
+if [ -f scripts/check_version_sync.py ] && [ -f src/joinery/__init__.py ]; then
+    "$PYTHON" scripts/check_version_sync.py || exit 1
+fi
+
 exit 0
