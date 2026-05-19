@@ -29,6 +29,7 @@ deviation_policy = "surface"
 
 [review]
 use_roborev = true
+use_isolated_subagent = true       # standard: same isolation discipline as production for review honesty
 writer = "claude-sonnet-4-6"
 reviewer = "claude-haiku-4-5"
 deep_reviewer = "claude-opus-4-7"

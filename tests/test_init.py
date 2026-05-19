@@ -54,6 +54,26 @@ def test_scaffold_writes_project_name_into_files(tmp_path: Path) -> None:
     assert "cool-app" in claude_text
 
 
+@pytest.mark.parametrize(
+    "tier,expected_isolated",
+    [("production", "true"), ("standard", "true"), ("sketch", "false")],
+)
+def test_scaffold_writes_use_isolated_subagent_per_tier(
+    tmp_path: Path, tier: str, expected_isolated: str
+) -> None:
+    """Audit PR #6: the new [review] use_isolated_subagent flag must land in every
+    scaffold with tier-appropriate default — true on production/standard (review
+    isolation matters), false on sketch (review ceremony fights iteration speed).
+    The pre-push hook + /review skill both depend on this key existing."""
+    target = tmp_path / f"p-{tier}"
+    scaffold(target=target, project_name="p", tier=tier, language="python", init_git=False)
+    config_text = (target / ".workshop" / "config.toml").read_text(encoding="utf-8")
+    assert f"use_isolated_subagent = {expected_isolated}" in config_text, (
+        f"Expected use_isolated_subagent = {expected_isolated} in {tier} scaffold; "
+        f"got config:\n{config_text}"
+    )
+
+
 def test_scaffold_refuses_non_empty_directory(tmp_path: Path) -> None:
     target = tmp_path / "existing"
     target.mkdir()

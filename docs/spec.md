@@ -1383,12 +1383,19 @@ What Joinery does NOT do: re-implement the review engine. That's roborev's job.
 
 Roborev is a younger project (982 stars vs. 25k+ for ESLint, 30k+ for ruff). Lower bus factor than the other tools Joinery adopts. **The framework treats roborev as the preferred implementation, not a required one.**
 
-`skills/review.md` includes fallback prose. If roborev is missing or broken:
+`skills/review.md` defines a four-engine cascade ordered by **strength of isolation between writer and reviewer** — not just by which tool exists. The framework's core principle is writer ≠ reviewer, and isolation is what makes that real:
 
-1. The skill detects the absence (`workshop doctor` warns; the skill itself checks).
-2. The fallback path invokes `claude code -p "<reviewer-prompt>" --model <reviewer-model>` directly with the diff.
-3. Output goes to `reviews/<commit-hash>.md` in the same format roborev would have written, so the rest of the framework (pre-push hook reading findings, severity-blocking) keeps working.
-4. The fallback loses roborev-specific features (auto-fix loop, interactive TUI, multi-agent detection) but preserves the core review behavior.
+1. **Engine A: roborev** — separate process, full isolation. Reviews live in `~/.roborev/reviews.db` and are accessed via `roborev show <sha> --json` or `roborev tui`.
+
+2. **Engine B: Isolated Claude Code subagent (audit PR #6).** When roborev is unavailable but Joinery is running inside Claude Code, the skill spawns a fresh-context subagent via the Task tool. The subagent receives only the diff, the tier, and the reviewer prompt — no plan.md, no open SQs, no commit messages, no conversation history. This is the load-bearing fallback path. Config: `[review] use_isolated_subagent` (default `true` on production + standard, `false` on sketch).
+
+3. **Engine C: Claude Code built-in `/review` CLI command** — runs in the current session. Less isolation (may see prior conversation), but battle-tested. Acceptable when (B) is disabled or the Task tool isn't available.
+
+4. **Engine D: External `claude code -p` subprocess** — last resort. Useful when running outside Claude Code entirely (CI, automation).
+
+Output goes to `reviews/<commit-hash>.md` for engines B/C/D in the same format roborev would have written, so the rest of the framework (pre-push hook reading findings, severity-blocking) keeps working. The `Engine:` header in the review file records which engine produced it, so future readers can weigh the finding's isolation guarantee.
+
+The fallback path loses roborev-specific features (auto-fix loop, interactive TUI, multi-agent detection) but preserves the core review behavior + isolation discipline.
 
 **Why hedge:** if roborev becomes unmaintained, gets a breaking change, or the user can't install Go binaries, the framework keeps working. Cost of the hedge ≈ zero — the fallback skill prose is what we'd write anyway if not adopting roborev.
 

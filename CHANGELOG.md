@@ -22,6 +22,30 @@ Closes the gap left by PR #20: roborev was correctly wired but intentionally doe
 
 **Net result:** every roborev finding is now visible at session start, gates session-end Phase 1, and (if blocking) refuses merge in Phase 4. The framework's "adversarial review actually changes behavior" loop is closed.
 
+### Added — `/review` isolated subagent engine (audit-driven port #6)
+
+Closes the partial-fix flagged in `docs/audits/obra-superpowers-2026-05-18.md` for hole #1 (subagent-isolated review). Before this PR, when roborev wasn't installed the `/review` skill fell back to the Claude Code built-in `/review` running in the *current session* — which sees the implementer's prior conversation, TODO comments, plan.md, open side quests. Reviews from a contaminated context aren't adversarial; they're agreement.
+
+**Engine cascade restructured around isolation strength, not just tool availability:**
+
+1. **roborev** (preferred — separate process, full isolation)
+2. **Isolated Claude Code subagent (NEW)** — `Task` tool spawns a fresh-context reviewer that sees ONLY the diff + tier + reviewer prompt. No project context, no conversation history, no implementer reasoning.
+3. **Claude Code built-in `/review`** — runs in-session, less isolation
+4. **External `claude code -p` subprocess** — last resort
+
+The skill prompt now includes the exact reviewer-subagent prompt template, deliberately stripped of any context about the implementer's reasoning. The reviewer sees the code and grades against tier-calibrated severity (production = strict, sketch = lenient). Output marks which engine produced the review in a new `Engine:` header on `reviews/<sha>.md` — future readers can weigh findings by isolation guarantee.
+
+**New config key `[review] use_isolated_subagent`:**
+- `production` — `true` (review honesty matters; isolation is non-negotiable)
+- `standard` — `true` (same)
+- `sketch` — `false` (review ceremony fights exploration speed; sketches that want review can fall through to engines C/D manually)
+
+**Tests:** 3 new in `tests/test_init.py` covering tier-appropriate defaults landing in scaffolded configs. The pre-push hook + `/review` skill both depend on the config key existing; the parametrized test locks this in.
+
+**Spec §12** restructured to describe the four-engine cascade and explain why ordering is by isolation strength, not tool availability.
+
+This is audit-driven port #6 of 10 from the May 18 obra/superpowers audit. PRs 1-5 shipped 2026-05-18 (#15-19). PR #21 (surfacing layer) is the 6th shipped overall but wasn't on the original 10-PR audit list. 4 audit ports remain after this: `/execute-plan`, `/swarm`, tier-gated `/tdd`, `writing-skills`+`receiving-review`.
+
 ### Fixed — roborev integration corrected against real-world v0.55.0 behavior
 
 Followed up on `workshop setup` shipping with several identifiers that turned out to be wrong. Verified against roborev's actual README + v0.55.0 release notes (2026-05-15) and patched:
