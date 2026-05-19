@@ -29,6 +29,7 @@ deviation_policy = "surface"       # surface | block | ignore
 
 [review]
 use_roborev = true                 # adopt roborev as review engine; false uses built-in fallback
+use_isolated_subagent = true       # when roborev unavailable, spawn fresh-context reviewer subagent via Task tool (audit PR #6)
 writer = "claude-sonnet-4-6"
 reviewer = "claude-haiku-4-5"
 deep_reviewer = "claude-opus-4-7"

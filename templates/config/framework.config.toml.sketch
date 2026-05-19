@@ -32,6 +32,7 @@ deviation_policy = "ignore"        # sketches don't enforce scope discipline
 
 [review]
 use_roborev = false                # sketch: no auto-review by default
+use_isolated_subagent = false      # sketch: skip review-ceremony; iterate fast
 writer = "claude-sonnet-4-6"
 reviewer = "claude-haiku-4-5"
 deep_reviewer = "claude-opus-4-7"
