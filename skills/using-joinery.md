@@ -34,12 +34,13 @@ You are working inside a **Joinery project**. Joinery is a personal coding frame
 ## Available skills/commands (invoke via `/<name>` or natural language)
 
 **Planning:** `/plan`, `/plan-system`, `/plan-data`, `/plan-flows`, `/plan-decisions`, `/plan-side-quests`
-**Marking:** `/mark`
-**Cutting:** (handled by the agent following plan.md §2 Files in Scope + §4 Forbidden Actions)
-**Finishing:** `/explain-back`, `/handover`, `/audit`, `/review`, `/security-review`, `/pr`
+**Marking:** `/mark`, `/tdd` (one-test-at-a-time RED-GREEN-REFACTOR; tier-gated)
+**Cutting:** `/execute-plan` (one-criterion-at-a-time walker), `/swarm` (multi-cluster subagent dispatch with two-stage review)
+**Finishing:** `/explain-back`, `/handover`, `/audit`, `/review`, `/receiving-review`, `/security-review`, `/pr`
+**Debugging:** `/debug` (4-phase RCA), `/verify` (evidence-before-claims)
 **Learning:** `/sq`, `/sq close SQ-NNN`, `/digest`
 **Docs:** `/docs`, `/docs-architecture`, `/docs-changelog`, `/docs-getting-started`, `/adr`
-**Meta:** `/rule`, `workshop session start`, `workshop session end`
+**Meta:** `/rule`, `/writing-skills` (author new skills), `workshop session start`, `workshop session end`
 
 If a skill the user invokes isn't recognized as `/<name>`, try the natural-language trigger from its description field — Joinery skills auto-invoke from triggers too.
 
@@ -58,9 +59,15 @@ Match their intent to a Joinery skill before acting:
 
 - "let's plan X" / "draft a plan" → `/plan`
 - "write the tests" / "translate the plan to tests" → `/mark`
-- "make these tests pass" / "cut the next cluster" → Cutting (no skill name; agent follows plan.md)
+- "RED-GREEN-REFACTOR" / "write the test first" → `/tdd`
+- "execute the plan" / "work the next criterion" → `/execute-plan`
+- "swarm the clusters" / "parallelize this plan" → `/swarm`
 - "what just happened" / "explain what we built" → `/explain-back`
 - "review this" / "second opinion" → `/review`
+- "respond to the review" / "received review feedback" → `/receiving-review`
+- "this is broken" / "find the bug" → `/debug`
+- "prove it works" / "evidence please" → `/verify`
+- "let's write a new skill" / "author a skill for X" → `/writing-skills`
 - "I don't get X" / "explain X later" → `/sq` (capture, don't explain inline)
 - "wrap up the session" / "session end" → `workshop session end` orchestrator
 
