@@ -6,6 +6,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added — roborev findings surfacing layer (audit-driven port #6)
+
+Closes the gap left by PR #20: roborev was correctly wired but intentionally does not surface findings to the developer beyond writing to its SQLite store at `~/.roborev/reviews.db`. Without an active surfacing layer, the pre-push hook would block on findings but the user wouldn't know findings existed until they tried to push. The framework owns this surfacing — that's what's new here.
+
+**`src/joinery/roborev.py` — new Python query module.** Pure-Python (no `jq` dependency) wrapper around `roborev show <sha> --json`. Public API: `is_available()`, `query_findings(shas)`, `summarize(findings) -> FindingsSummary`, `format_summary(summary) -> str`. Graceful: returns empty results if `roborev` isn't on PATH. The pre-push hook keeps its parallel `bash + jq` implementation because it runs in a pure-shell context; this module is the Python twin for hook scripts + skills.
+
+**SessionStart hook (`templates/session_start_hook.py.template`) — surfaces findings at every session start.** New `_branch_commits()` resolves commits on the current branch but not yet on `origin/<main>` (capped at 20 to bound subprocess calls). New `_roborev_findings_summary()` walks those commits, queries roborev for unresolved critical/high findings per commit, and emits a one-line summary like `"2 critical, 1 high unresolved (commits abc1234, def5678)"` injected into the orientation context. Silent fallback if roborev isn't installed. Without this, roborev was firing reviews silently into the SQLite store — findings invisible until the user happened to run `roborev tui`.
+
+**`workshop session end` Phase 1 gate.** Phase 1 used to gate only on red tests. It now ALSO gates on unresolved roborev critical/high findings on the branch. Bash + jq snippet in the skill prompt mirrors the pre-push hook's query pattern. Graceful: if roborev isn't on PATH, the gate is skipped silently. The Phase 1 hard rule was extended accordingly. The skill description now mentions the roborev gate so auto-invocation triggers stay accurate.
+
+**Phase 4 (production-tier merge gate) — stale `reviews/<sha>.md` reference fixed.** The Phase 4 prose still pointed at "no `reviews/<sha>.md` file exists" as the unreviewed-commit test — a leftover from before PR #20 corrected the integration. Roborev's data lives in SQLite, not a markdown file. Phase 4 now branches: if roborev is installed, query `roborev show <sha> --json` and refuse the merge on unresolved critical/high; if roborev isn't installed, fall back to the framework's built-in `/review` skill (which still writes `reviews/<sha>.md` for record-keeping in the no-roborev path).
+
+**Tests (`tests/test_roborev.py`):** 19 new tests covering `is_available` (PATH miss, version probe success/failure, subprocess exception), `query_findings` (parses critical/high, drops resolved/dismissed/fixed, falls through `severity → level`, treats missing status as `open`, swallows empty stdout / malformed JSON / subprocess exceptions, dedupes repeated SHAs), `summarize` (severity counts, affected-sha collection, empty-input handling), `format_summary` (empty input → empty string, critical ordered first, sha truncation at 5). `BLOCKING_SEVERITIES` constant is locked under test to keep gate semantics synchronized with the pre-push hook.
+
+**Net result:** every roborev finding is now visible at session start, gates session-end Phase 1, and (if blocking) refuses merge in Phase 4. The framework's "adversarial review actually changes behavior" loop is closed.
+
 ### Fixed — roborev integration corrected against real-world v0.55.0 behavior
 
 Followed up on `workshop setup` shipping with several identifiers that turned out to be wrong. Verified against roborev's actual README + v0.55.0 release notes (2026-05-15) and patched:

@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -88,6 +90,125 @@ def _open_side_quests(root: Path) -> list[str]:
     return opens
 
 
+def _branch_commits(root: Path, *, max_commits: int = 20) -> list[str]:
+    """Return SHAs on the current branch but not yet on origin/<main>.
+
+    These are the commits roborev will have reviewed locally and that we want
+    to surface findings for. Capped at max_commits to bound subprocess calls.
+    Empty list on any failure.
+    """
+    try:
+        # Resolve configured main branch (default 'main')
+        main = "main"
+        config = root / ".workshop" / "config.toml"
+        if config.is_file():
+            try:
+                import tomllib
+
+                with config.open("rb") as fh:
+                    data = tomllib.load(fh)
+                main = (
+                    data.get("git", {}).get("branching", {}).get("main_branch", "main")
+                )
+            except Exception:
+                pass
+
+        # Try origin/<main>..HEAD first; fall back to <main>..HEAD if no remote
+        for base in (f"origin/{main}", main):
+            result = subprocess.run(
+                ["git", "rev-list", f"{base}..HEAD"],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            if result.returncode == 0:
+                shas = [s.strip() for s in result.stdout.splitlines() if s.strip()]
+                return shas[:max_commits]
+        return []
+    except Exception:
+        return []
+
+
+def _roborev_findings_summary(root: Path) -> str:
+    """One-line summary of unresolved roborev critical/high findings.
+
+    Returns empty string when:
+    - roborev isn't on PATH (user hasn't run `workshop setup`)
+    - no commits to inspect (clean branch, or just merged main)
+    - no unresolved blocking findings
+
+    Never raises. Whole function is wrapped in a broad try so a roborev daemon
+    issue can't break session-start orientation.
+    """
+    try:
+        if shutil.which("roborev") is None:
+            return ""
+        shas = _branch_commits(root)
+        if not shas:
+            return ""
+
+        critical = 0
+        high = 0
+        affected: list[str] = []
+        resolved_statuses = {"resolved", "dismissed", "fixed"}
+
+        for sha in shas:
+            try:
+                result = subprocess.run(
+                    ["roborev", "show", sha, "--json"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                )
+            except Exception:
+                continue
+            if result.returncode != 0 or not result.stdout.strip():
+                continue
+            try:
+                payload = json.loads(result.stdout)
+            except Exception:
+                continue
+            findings = payload.get("findings") if isinstance(payload, dict) else None
+            if not isinstance(findings, list):
+                continue
+            sha_blocks = 0
+            for f in findings:
+                if not isinstance(f, dict):
+                    continue
+                sev = str(f.get("severity") or f.get("level") or "").strip().lower()
+                status = str(f.get("status") or "open").strip().lower() or "open"
+                if status in resolved_statuses:
+                    continue
+                if sev == "critical":
+                    critical += 1
+                    sha_blocks += 1
+                elif sev == "high":
+                    high += 1
+                    sha_blocks += 1
+            if sha_blocks > 0:
+                affected.append(sha[:7])
+
+        if critical == 0 and high == 0:
+            return ""
+
+        parts = []
+        if critical:
+            parts.append(f"{critical} critical")
+        if high:
+            parts.append(f"{high} high")
+        head = ", ".join(parts)
+        if affected:
+            shorts = affected[:5]
+            extra = f", +{len(affected) - 5} more" if len(affected) > 5 else ""
+            return f"{head} unresolved (commits {', '.join(shorts)}{extra})"
+        return f"{head} unresolved"
+    except Exception:
+        return ""
+
+
 def _compose_context(root: Path) -> str:
     """Build the additionalContext string for the session."""
     tier = _read_tier(root) or "(unknown)"
@@ -97,6 +218,7 @@ def _compose_context(root: Path) -> str:
     handover_excerpt = _safe_read(root / "HANDOVER.md", max_chars=2000)
     open_sqs = _open_side_quests(root)
     plan_present = (root / "plan.md").is_file()
+    roborev_line = _roborev_findings_summary(root)
 
     lines: list[str] = []
     lines.append("# Joinery session start — auto-injected context")
@@ -113,6 +235,12 @@ def _compose_context(root: Path) -> str:
     else:
         lines.append(
             "**Open side quests:** none (or learning/side-quests.md not yet populated)"
+        )
+    if roborev_line:
+        lines.append(f"**Roborev findings:** {roborev_line}")
+        lines.append(
+            "  - Inspect with `roborev show <sha>` or `roborev tui`. "
+            "Resolve before next session-end (Phase 1 will gate)."
         )
     lines.append("")
     if handover_excerpt:
