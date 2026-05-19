@@ -1,7 +1,7 @@
 ---
 name: workshop-session-end
 description: |
-  Full session-close orchestrator. Verifies tests, detects branch state, presents merge/PR/keep/discard menu, then runs explain-back, handover, side-quest reconciliation, primary/secondary classification, and token report. The session-close ritual. Invoked by the `workshop session end` CLI command. Triggers when user says "ending the session", "wrapping up", "session end", "done for now", "close out this session", "finish this branch".
+  Full session-close orchestrator. Verifies tests + unresolved roborev critical/high findings, detects branch state, presents merge/PR/keep/discard menu, then runs explain-back, handover, side-quest reconciliation, primary/secondary classification, and token report. The session-close ritual. Invoked by the `workshop session end` CLI command. Triggers when user says "ending the session", "wrapping up", "session end", "done for now", "close out this session", "finish this branch".
 ---
 
 # /workshop-session-end — full session-close orchestrator
@@ -23,14 +23,33 @@ The orchestrator does seven things in order:
 
 ## Procedure
 
-### Phase 1 — Verify tests pass
+### Phase 1 — Verify tests pass + roborev gate
 
-Before anything else, confirm the work is green.
+Before anything else, confirm the work is green AND that there are no unresolved blocking review findings.
 
 1. Run the project's test suite. For Python: `pytest`. For TypeScript: `npm test` or equivalent. Read `framework.config.toml` for the configured test command if not standard.
 2. Capture pass/fail counts + XFAIL counts.
 3. If anything FAILED (not XFAIL — actually failed), stop the orchestrator and surface: *"Tests are red. The branch isn't ready to finish. Fix the failures first, then re-invoke."* Do NOT proceed to the menu.
-4. If all passed (or only expected XFAIL): produce a `/verify` block with the test output as evidence, then proceed.
+4. **Roborev unresolved-findings gate.** If `roborev` is on PATH, query unresolved critical/high findings on commits ahead of the configured main branch:
+
+   ```bash
+   # Determine commits on this branch not yet on main
+   BASE="origin/$(python -c "import tomllib; print(tomllib.load(open('.workshop/config.toml','rb'))['git']['branching']['main_branch'])")"
+   SHAS=$(git rev-list "${BASE}..HEAD" 2>/dev/null || git rev-list "main..HEAD")
+
+   # For each sha, ask roborev for unresolved critical/high findings
+   for sha in $SHAS; do
+     roborev show "$sha" --json 2>/dev/null \
+       | jq -e '[.findings[]? | select((.severity // .level) == "critical" or (.severity // .level) == "high") | select((.status // "open") != "resolved" and (.status // "open") != "dismissed" and (.status // "open") != "fixed")] | length > 0' \
+       >/dev/null 2>&1 && echo "BLOCKING: $sha"
+   done
+   ```
+
+   If any commit prints `BLOCKING`, stop the orchestrator and surface the list with the message: *"Roborev has unresolved critical/high findings on commits X, Y, Z. Resolve, dismiss, or mark fixed in `roborev tui` before finishing the session."* Do NOT proceed to the menu.
+
+   **Graceful degradation:** if `roborev` isn't on PATH, skip this check silently (the session can still finish — the user may not have run `workshop setup`).
+
+5. If all passed (or only expected XFAIL) AND no blocking roborev findings: produce a `/verify` block with the test output + roborev status as evidence, then proceed.
 
 ### Phase 2 — Detect branch state
 
@@ -80,7 +99,10 @@ Based on branch state, surface a context-appropriate menu. The menu is the user'
 
 ### Phase 4 — Execute the chosen path
 
-**Production tier safety net before any merge:** if the user picks "merge" and `/review` hasn't run on the latest commit (no `reviews/<sha>.md` file exists), run `/review` automatically first. If `/review` produces Critical findings, refuse the merge and surface them. User can override only by explicitly running `/review` again or addressing the findings.
+**Production tier safety net before any merge:** if the user picks "merge", verify the latest commit has been reviewed.
+
+- **If `roborev` is installed:** query `roborev show <sha> --json` for the latest commit. If roborev has no review yet, wait briefly (the daemon may still be processing) — `roborev wait <sha> --timeout 60` if available, otherwise sleep + retry. If roborev returns review data with any **unresolved critical/high** findings, refuse the merge and surface the findings with their file:line and message. User can override only by resolving/dismissing in `roborev tui` or addressing the code.
+- **If `roborev` is NOT installed:** fall back to the framework's built-in `/review` skill — run it on the latest commit's diff. If `/review` flags Critical findings, refuse the merge. The fallback writes its output to `reviews/<sha>.md` for record-keeping; roborev's path does NOT write that file (its data lives in the SQLite store at `~/.roborev/reviews.db`).
 
 Execute the user's choice via the appropriate `gh` / `git` commands. Show the output. Confirm success before proceeding.
 
@@ -158,7 +180,7 @@ HANDOVER updated. workshop session start picks up here.
 
 ## Hard rules
 
-- **Phase 1 (verify tests pass) is a gate, not a step.** Red tests = stop the orchestrator. Don't proceed to anything else.
+- **Phase 1 (verify tests + roborev) is a gate, not a step.** Red tests OR unresolved roborev critical/high = stop the orchestrator. Don't proceed to anything else. Roborev gate degrades gracefully if roborev isn't installed (skip silently); test gate has no fallback (tests must run + pass).
 - **Phase 3 (the menu) is the user's choice, never the agent's default.** Don't pick "merge" because it seems natural — present the options and wait.
 - **Phase 4 production-tier review gate is non-negotiable.** No merge without a `/review` pass on the latest commit. Override requires explicit user action, never silent skip.
 - **Phase 5 comprehension gate is human-only.** The agent's job ends at "here's the explain-back." The user decides if it's satisfactory.
