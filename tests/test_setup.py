@@ -132,3 +132,144 @@ def test_format_failure_help_lists_attempts_and_next_steps() -> None:
     assert "github.com/roborev-dev/roborev" in text
     assert "workshop doctor" in text
     assert "/review" in text  # surfaces the fallback exists
+
+
+# ---------------------------------------------------------------------------
+# Shell-profile backfill (Windows PATH-propagation workaround)
+# Filed 2026-05-19 after the third "roborev: command not found" hit during
+# placket-ops V-cluster work. workshop setup now writes the PATH-extending
+# line into ~/.bashrc + PowerShell profile on Windows so new terminals
+# pick up roborev without needing a full app relaunch.
+# ---------------------------------------------------------------------------
+
+
+class TestShellProfileBackfill:
+    """`_ensure_shell_profiles_have_roborev_path` writes idempotent PATH-extender
+    blocks to common shell startups on Windows. No-op elsewhere."""
+
+    def test_noop_on_macos(self, tmp_path) -> None:
+        from joinery.setup import _ensure_shell_profiles_have_roborev_path
+
+        with mock.patch("joinery.setup.platform.system", return_value="Darwin"):
+            touched = _ensure_shell_profiles_have_roborev_path()
+        assert touched == [], "macOS native PATH propagation works; no shell-profile writes needed"
+
+    def test_noop_on_linux(self, tmp_path) -> None:
+        from joinery.setup import _ensure_shell_profiles_have_roborev_path
+
+        with mock.patch("joinery.setup.platform.system", return_value="Linux"):
+            touched = _ensure_shell_profiles_have_roborev_path()
+        assert touched == []
+
+    def test_windows_writes_to_bashrc(self, tmp_path) -> None:
+        from joinery.setup import (
+            SHELL_PROFILE_MARKER,
+            _ensure_shell_profiles_have_roborev_path,
+        )
+
+        with (
+            mock.patch("joinery.setup.platform.system", return_value="Windows"),
+            mock.patch("joinery.setup.Path.home", return_value=tmp_path),
+        ):
+            touched = _ensure_shell_profiles_have_roborev_path()
+
+        bashrc = tmp_path / ".bashrc"
+        assert bashrc.exists(), "should have created ~/.bashrc"
+        content = bashrc.read_text(encoding="utf-8")
+        assert SHELL_PROFILE_MARKER in content
+        assert ".roborev/bin" in content
+        assert "export PATH=" in content
+        assert str(bashrc) in touched
+
+    def test_windows_writes_to_powershell_profile(self, tmp_path) -> None:
+        from joinery.setup import (
+            SHELL_PROFILE_MARKER,
+            _ensure_shell_profiles_have_roborev_path,
+        )
+
+        with (
+            mock.patch("joinery.setup.platform.system", return_value="Windows"),
+            mock.patch("joinery.setup.Path.home", return_value=tmp_path),
+        ):
+            touched = _ensure_shell_profiles_have_roborev_path()
+
+        ps_profile = (
+            tmp_path / "Documents" / "WindowsPowerShell" / "Microsoft.PowerShell_profile.ps1"
+        )
+        assert ps_profile.exists(), "should have created the PowerShell profile path"
+        content = ps_profile.read_text(encoding="utf-8")
+        assert SHELL_PROFILE_MARKER in content
+        assert ".roborev" in content
+        assert "$env:Path" in content
+        assert str(ps_profile) in touched
+
+    def test_idempotent_second_run_is_noop(self, tmp_path) -> None:
+        """Running setup twice doesn't duplicate the block in either profile."""
+        from joinery.setup import _ensure_shell_profiles_have_roborev_path
+
+        with (
+            mock.patch("joinery.setup.platform.system", return_value="Windows"),
+            mock.patch("joinery.setup.Path.home", return_value=tmp_path),
+        ):
+            first = _ensure_shell_profiles_have_roborev_path()
+            second = _ensure_shell_profiles_have_roborev_path()
+
+        assert len(first) == 2, f"first run should touch bashrc + PS profile, got {first}"
+        assert second == [], f"second run should be a no-op, got {second}"
+
+    def test_idempotent_respects_existing_pre_existing_bashrc(self, tmp_path) -> None:
+        """If ~/.bashrc already exists with the marker (e.g., user added it
+        manually), we don't append again."""
+        from joinery.setup import (
+            SHELL_PROFILE_MARKER,
+            _ensure_shell_profiles_have_roborev_path,
+        )
+
+        bashrc = tmp_path / ".bashrc"
+        bashrc.write_text(
+            f"# user's existing config\n{SHELL_PROFILE_MARKER}\n# already configured\n",
+            encoding="utf-8",
+        )
+
+        with (
+            mock.patch("joinery.setup.platform.system", return_value="Windows"),
+            mock.patch("joinery.setup.Path.home", return_value=tmp_path),
+        ):
+            touched = _ensure_shell_profiles_have_roborev_path()
+
+        # bashrc not touched (already had marker); PS profile is fresh, so touched
+        assert str(bashrc) not in touched
+        content = bashrc.read_text(encoding="utf-8")
+        # Marker appears exactly once still
+        assert content.count(SHELL_PROFILE_MARKER) == 1
+
+    def test_idempotent_preserves_existing_content(self, tmp_path) -> None:
+        """Appending to an existing bashrc preserves prior content."""
+        from joinery.setup import _ensure_shell_profiles_have_roborev_path
+
+        bashrc = tmp_path / ".bashrc"
+        original = "# user's existing config\nexport MY_VAR=foo\n"
+        bashrc.write_text(original, encoding="utf-8")
+
+        with (
+            mock.patch("joinery.setup.platform.system", return_value="Windows"),
+            mock.patch("joinery.setup.Path.home", return_value=tmp_path),
+        ):
+            _ensure_shell_profiles_have_roborev_path()
+
+        content = bashrc.read_text(encoding="utf-8")
+        assert content.startswith(original), "must not overwrite existing bashrc content"
+        assert ".roborev/bin" in content
+
+    def test_silent_on_io_failure(self, tmp_path) -> None:
+        """Shell-profile writes are best-effort. A broken filesystem shouldn't
+        crash the setup flow."""
+        from joinery.setup import _append_if_missing
+
+        # Try to write to a path under a file (not a directory) — should fail silently
+        blocker = tmp_path / "blocker"
+        blocker.write_text("not a directory", encoding="utf-8")
+        impossible = blocker / "subdir" / "profile"
+
+        ok = _append_if_missing(impossible, "# marker", "# content\n")
+        assert ok is False, "should return False on I/O failure, not raise"

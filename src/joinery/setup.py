@@ -37,11 +37,102 @@ class SetupResult:
     roborev_already_present: bool = False
     roborev_init_run: bool = False
     roborev_init_error: str = ""
+    shell_profiles_updated: list[str] = None  # type: ignore[assignment]
     attempts: list[InstallAttempt] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.attempts is None:
             self.attempts = []
+        if self.shell_profiles_updated is None:
+            self.shell_profiles_updated = []
+
+
+SHELL_PROFILE_MARKER = "# Roborev (added by `workshop setup`)"
+
+
+def _ensure_shell_profiles_have_roborev_path() -> list[str]:
+    """Append a PATH-extending line to common shell startup files on Windows.
+
+    On Windows, `workshop setup` runs roborev's installer which adds
+    `%USERPROFILE%\\.roborev\\bin` to the User-level PATH. The problem: Windows
+    only propagates User PATH changes to NEWLY-STARTED terminal applications,
+    not to existing sessions (or even new tabs in an already-open Windows
+    Terminal / Cursor / VS Code). Result: users get `roborev: command not
+    found` until they fully quit + relaunch every terminal app, which they
+    never figure out from the install output.
+
+    This function papers over that by appending a PATH-extending line to:
+      - `~/.bashrc` (Git Bash / WSL)
+      - `$PROFILE` for PowerShell (Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1)
+
+    Each line is idempotent (checks for `~/.roborev/bin` already on PATH before
+    extending), and the function itself is idempotent — it scans for an existing
+    SHELL_PROFILE_MARKER comment before appending.
+
+    Returns the list of profile paths that were touched (empty if all were
+    already configured or if not on Windows).
+
+    On macOS/Linux, native PATH propagation works correctly and `brew` / the
+    curl installer handle this themselves. No-op there.
+    """
+    if platform.system() != "Windows":
+        return []
+
+    touched: list[str] = []
+    home = Path.home()
+
+    # Git Bash / WSL
+    bashrc = home / ".bashrc"
+    bashrc_block = (
+        f"\n{SHELL_PROFILE_MARKER}\n"
+        "# Adds roborev to PATH for Git Bash sessions. Idempotent: only extends\n"
+        "# PATH if the dir exists and isn't already in PATH. Workaround for\n"
+        "# Windows User-PATH not propagating to existing terminal app sessions.\n"
+        'if [ -d "$HOME/.roborev/bin" ] && [[ ":$PATH:" != *":$HOME/.roborev/bin:"* ]]; then\n'
+        '    export PATH="$PATH:$HOME/.roborev/bin"\n'
+        "fi\n"
+    )
+    if _append_if_missing(bashrc, SHELL_PROFILE_MARKER, bashrc_block):
+        touched.append(str(bashrc))
+
+    # PowerShell — $PROFILE default location on Windows
+    ps_profile = home / "Documents" / "WindowsPowerShell" / "Microsoft.PowerShell_profile.ps1"
+    ps_block = (
+        f"\n{SHELL_PROFILE_MARKER}\n"
+        "# Adds roborev to PATH for PowerShell sessions. Idempotent: only\n"
+        "# extends PATH if the dir exists and isn't already in PATH. Workaround\n"
+        "# for Windows User-PATH not propagating to existing terminal sessions.\n"
+        '$roborevBin = Join-Path $HOME ".roborev\\bin"\n'
+        'if ((Test-Path $roborevBin) -and ($env:Path -notlike "*$roborevBin*")) {\n'
+        '    $env:Path += ";$roborevBin"\n'
+        "}\n"
+    )
+    if _append_if_missing(ps_profile, SHELL_PROFILE_MARKER, ps_block):
+        touched.append(str(ps_profile))
+
+    return touched
+
+
+def _append_if_missing(path: Path, marker: str, content: str) -> bool:
+    """Append `content` to `path` only if `marker` isn't already in the file.
+
+    Creates parent dirs + the file if missing. Returns True if it wrote.
+    Returns False on any I/O failure (silent — shell-profile updates are
+    best-effort, never block the setup flow).
+    """
+    try:
+        if path.exists():
+            existing = path.read_text(encoding="utf-8", errors="ignore")
+            if marker in existing:
+                return False
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            existing = ""
+        with path.open("a", encoding="utf-8", newline="\n") as fh:
+            fh.write(content)
+        return True
+    except OSError:
+        return False
 
 
 def run_roborev_init(project_root: Path) -> tuple[bool, str]:
@@ -55,8 +146,9 @@ def run_roborev_init(project_root: Path) -> tuple[bool, str]:
     if not (project_root / ".git").is_dir():
         return False, "not a git repo"
     try:
-        result = subprocess.run(
-            ["roborev", "init"],
+        # S603/S607: roborev is on PATH (we just verified with shutil.which); fixed args.
+        result = subprocess.run(  # noqa: S603
+            ["roborev", "init"],  # noqa: S607
             cwd=project_root,
             capture_output=True,
             text=True,
@@ -102,6 +194,12 @@ def run_setup(*, assume_yes: bool = False, project_root: Path | None = None) -> 
         attempt.error = err
         if ok and shutil.which("roborev"):
             result.roborev_installed = True
+            # Windows PATH propagation gotcha: roborev's installer adds
+            # ~/.roborev/bin to User PATH but existing terminal apps don't see
+            # it until full app relaunch. Backfill into common shell profiles
+            # so new Git Bash + PowerShell sessions see roborev immediately.
+            # No-op on macOS/Linux (native PATH handling works).
+            result.shell_profiles_updated = _ensure_shell_profiles_have_roborev_path()
             # If the caller passed a project_root, also run `roborev init` to
             # install the post-commit hook in that project.
             if project_root is not None and (project_root / ".git").is_dir():
@@ -192,7 +290,8 @@ def _run_install(command: list[str]) -> tuple[bool, str]:
     Captures stderr for diagnostic surfacing.
     """
     try:
-        result = subprocess.run(
+        # S603: command is built from our hardcoded _build_install_attempts list; not user input.
+        result = subprocess.run(  # noqa: S603
             command,
             capture_output=True,
             text=True,

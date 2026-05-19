@@ -587,7 +587,9 @@ def setup_command(yes: bool) -> None:
         elif attempt.success:
             click.echo(f"  - {attempt.label}: SUCCESS")
         else:
-            err = attempt.error.strip().splitlines()[0] if attempt.error.strip() else "non-zero exit"
+            err = (
+                attempt.error.strip().splitlines()[0] if attempt.error.strip() else "non-zero exit"
+            )
             click.echo(f"  - {attempt.label}: failed ({err})")
 
     click.echo("")
@@ -604,6 +606,16 @@ def setup_command(yes: bool) -> None:
             click.echo(
                 "Not inside a Joinery project — run `roborev init` from your "
                 "project root to install the post-commit hook there."
+            )
+        if result.shell_profiles_updated:
+            click.echo("")
+            click.echo("Updated shell profiles so new terminals see roborev:")
+            for p in result.shell_profiles_updated:
+                click.echo(f"  - {p}")
+            click.echo(
+                "Existing terminal sessions still need `source ~/.bashrc` "
+                "(Git Bash) or `. $PROFILE` (PowerShell) to pick it up — OR "
+                "fully relaunch the terminal application."
             )
         click.echo("")
         click.echo("Next: `workshop doctor` to verify daemon health.")
