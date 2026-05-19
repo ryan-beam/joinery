@@ -46,6 +46,26 @@ The skill prompt now includes the exact reviewer-subagent prompt template, delib
 
 This is audit-driven port #6 of 10 from the May 18 obra/superpowers audit. PRs 1-5 shipped 2026-05-18 (#15-19). PR #21 (surfacing layer) is the 6th shipped overall but wasn't on the original 10-PR audit list. 4 audit ports remain after this: `/execute-plan`, `/swarm`, tier-gated `/tdd`, `writing-skills`+`receiving-review`.
 
+### Added — final 4 audit-driven ports close out the obra/superpowers porting plan
+
+This PR ships the remaining 4 of 10 ports from `docs/audits/obra-superpowers-2026-05-18.md`. With this merged, the audit-driven porting work surfaced during the 2026-05-18 placket-ops dogfood is complete (ports 1-6 shipped in PRs #15-19 + #22; ports 7-10 ship here).
+
+**`/execute-plan` (audit port #7) — `skills/execute-plan.md`.** Stop-condition-driven plan walker. Reads `plan.md`, finds the next unimplemented success criterion in §3, and works through it with explicit STOP conditions between steps. Production tier confirms at each step; standard confirms between criteria; sketch flows without auto-stops. The Cutting-phase discipline that prevents "just keep going" agent drift. Pairs with `/mark` (which sets up the failing tests batch) — `/mark` is plan→tests, `/execute-plan` is one-test-at-a-time-cutting.
+
+**`/swarm` (audit port #8) — `skills/swarm.md`.** The biggest port. Subagent-driven development pattern: for plans with multiple independent clusters, dispatches each to a fresh isolated subagent via the Task tool, plus per-cluster auto-review by a SECOND isolated subagent. Two-stage isolation enforced: writer ≠ reviewer, both ≠ orchestrator. Parent session tracks all subagents via TodoWrite. Reviews land in `reviews/cluster-<name>-<sha>.md` with `Engine: swarm-reviewer-subagent` header. **Fully closes audit hole #1** (auto-review on cluster PRs) — PR #22 isolated the reviewer; `/swarm` isolates the implementer too, and bundles per-cluster auto-review into the workflow itself. Refuses to run on sketch tier (ceremony fights iteration); refuses to run if Task tool isn't available (isolation IS the point). 3+ cluster threshold suggested — for 1-2 clusters, use `/execute-plan` instead.
+
+**`/tdd` (audit port #9) — `skills/tdd.md`.** Strict RED-GREEN-REFACTOR cycle, tier-gated. **Joinery's deliberate divergence from obra/superpowers**: upstream makes TDD a universal iron law; Joinery makes it tier-gated because the `sketch` tier exists for comprehension-first exploration where the ceremony fights the work. Mandatory on production (no code without a test observed RED first; paste failure output as `/verify`-style evidence). Recommended on standard (skill surfaces, user can decline). Off by default on sketch (manual invoke only). Distinct from `/mark`: `/mark` is batch plan→tests; `/tdd` is the one-test-at-a-time loop.
+
+**`/writing-skills` + `/receiving-review` (audit port #10) — `skills/writing-skills.md` + `skills/receiving-review.md`.** Two documentation skills.
+
+`/writing-skills`: meta-skill for authoring Joinery skills. TDD-analog 5-step workflow (RED triggers → GREEN procedure → REFACTOR cold-read → DOGFOOD in real project → SHIP after 3 consecutive clean dogfoods). Covers anatomy, naming conventions, the three skill locations (Joinery-built / project-local / user-global), tier discipline. Adapted from obra/superpowers `writing-skills`.
+
+`/receiving-review`: counterpart to `/review`. The discipline for handling review feedback honestly. Load-bearing principle: the writer is the LEAST objective person to evaluate review feedback, so the default response is "the reviewer probably caught something I missed" — not "the reviewer doesn't understand my reasoning." Three response categories ("fix it" / "fair point — record + defer to SQ" / "I disagree — reason is X"), with the disagreement discipline requiring written-down reasoning that would pass another reviewer's evaluation. Tier-gated enforcement via the pre-push hook + `workshop session end` Phase 1 gate (both wired in PR #21).
+
+**`skills/using-joinery.md` updated** to surface all 5 new skills in the meta-skill's available-commands map + trigger-to-skill table. Future session-start orientation will list `/execute-plan`, `/swarm`, `/tdd`, `/writing-skills`, `/receiving-review`.
+
+**Net: audit-driven porting plan is now complete.** 8 PORT verdicts from the audit (3 SKIP, 2 REJECT explicitly preserved). PR #21 surfacing layer + PR #22 isolated subagent review weren't on the original 10-PR audit list but emerged during the porting work — both shipped. The framework now has the full obra/superpowers session-isolation discipline (SessionStart hook, isolated review, isolated implementation, two-stage review, TodoWrite-tracked subagents) without inheriting upstream's slash-command deprecation, plugin-distribution model, or universal-TDD-as-iron-law.
+
 ### Fixed — roborev integration corrected against real-world v0.55.0 behavior
 
 Followed up on `workshop setup` shipping with several identifiers that turned out to be wrong. Verified against roborev's actual README + v0.55.0 release notes (2026-05-15) and patched:
